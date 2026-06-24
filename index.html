@@ -90,7 +90,7 @@ function spawnBossBullet(x,y,angle,speed,dmg,color,size){
 
 // ==================== 相机 ====================
 const cam={x:0,y:0,shake:0};
-function addShake(amount){cam.shake=Math.min(cam.shake+amount,15)}
+function addShake(amount){cam.shake=Math.min(cam.shake+amount*0.5,8)}
 
 // ==================== 粒子池 ====================
 const particles=[];
@@ -257,7 +257,119 @@ const WEAPONS={
     }},
 };
 
-// ==================== 敌人死亡 ====================
+// ==================== 组合技系统 ====================
+// 当任意技能Lv5+另一个技能Lv1+触发
+const COMBOS={
+  'sword+lightning':{name:'⚡⚔ 雷霆斩杀',desc:'刀气附带连锁闪电，击中3个目标',
+    trigger(combo,dt){
+      combo.cd-=dt;if(combo.cd>0)return;combo.cd=2.5;
+      const ens=enemies.filter(e=>!e.dead&&dist(player,e)<200);
+      if(!ens.length)return;
+      // 找最近的斩3下，每下弹射
+      const target=ens.reduce((a,b)=>dist(player,a)<dist(player,b)?a:b);
+      const dmg=60+combo.lv*15;
+      target.hp-=dmg;spawnDmg(target.x,target.y,dmg,'#ff0');
+      G.lightFx.push({x:target.x,y:target.y,life:0.3});
+      if(target.hp<=0)killEnemy(target);
+      // 弹射2个
+      const others=ens.filter(e=>e!==target).sort((a,b)=>dist(target,a)-dist(target,b));
+      for(let i=0;i<Math.min(2,others.length);i++){
+        others[i].hp-=dmg*0.6;others[i].hitFlash=0.1;
+        spawnDmg(others[i].x,others[i].y,dmg*0.6,'#ff8');
+        G.lightFx.push({x:others[i].x,y:others[i].y,life:0.25});
+        if(others[i].hp<=0)killEnemy(others[i]);
+      }
+      addShake(3);
+    }},
+  'fire+ice':{name:'🔥❄ 蒸汽爆炸',desc:'灼烧+冰冻的敌人引发蒸汽爆破',
+    trigger(combo,dt){
+      combo.cd-=dt;if(combo.cd>0)return;combo.cd=3;
+      const range=160+combo.lv*20,dmg=50+combo.lv*20;
+      for(const e of enemies){
+        if(!e.dead&&e.burning>0&&e.slowTimer>0&&dist(player,e)<range){
+          e.hp-=dmg;e.hitFlash=0.15;
+          spawnP(e.x,e.y,'#fff',10,5,0.5,4);
+          spawnDmg(e.x,e.y,dmg,'#fff');
+          if(e.hp<=0)killEnemy(e);
+        }
+      }
+      // 范围蒸汽伤害
+      for(const e of enemies){
+        if(!e.dead&&dist(player,e)<range*0.7){
+          e.hp-=dmg*0.3;e.hitFlash=0.05;
+          if(e.hp<=0)killEnemy(e);
+        }
+      }
+      addShake(4);
+    }},
+  'lightning+orb':{name:'⚡🌀 电磁风暴',desc:'旋风斩附带闪电链，持续电击周围',
+    trigger(combo,dt){
+      combo.cd-=dt;if(combo.cd>0)return;combo.cd=1.8;
+      const range=120+combo.lv*15,dmg=30+combo.lv*10;
+      const ts=enemies.filter(e=>!e.dead&&dist(player,e)<range);
+      for(let i=0;i<Math.min(3+combo.lv,ts.length);i++){
+        const t=ts[i];
+        t.hp-=dmg;t.hitFlash=0.08;
+        G.lightFx.push({x:t.x,y:t.y,life:0.2});
+        spawnDmg(t.x,t.y,dmg,'#0ff');
+        if(t.hp<=0)killEnemy(t);
+      }
+    }},
+  'sword+fire':{name:'⚔🔥 烈焰斩',desc:'刀气点燃敌人，范围爆炸',
+    trigger(combo,dt){
+      combo.cd-=dt;if(combo.cd>0)return;combo.cd=2;
+      const range=150+combo.lv*15,dmg=40+combo.lv*12;
+      const ts=enemies.filter(e=>!e.dead&&dist(player,e)<range);
+      if(!ts.length)return;
+      const t=ts.reduce((a,b)=>dist(player,a)<dist(player,b)?a:b);
+      t.hp-=dmg;t.burning=4;t.burnDmg=15+combo.lv*5;
+      spawnDmg(t.x,t.y,dmg,'#f44');
+      G.fireFx.push({x:t.x,y:t.y,range:60,life:0.3,max:0.3});
+      // 爆炸伤害周围
+      for(const e of enemies){
+        if(e!==t&&!e.dead&&dist(t,e)<60){
+          e.hp-=dmg*0.5;e.burning=3;e.burnDmg=10;
+          if(e.hp<=0)killEnemy(e);
+        }
+      }
+      if(t.hp<=0)killEnemy(t);
+      addShake(3);
+    }},
+  'orb+ice':{name:'🌀❄ 冰霜旋风',desc:'旋风斩变成冰刃，大范围减速+伤害',
+    trigger(combo,dt){
+      combo.cd-=dt;if(combo.cd>0)return;combo.cd=2.2;
+      const range=140+combo.lv*18,dmg=25+combo.lv*8;
+      for(const e of enemies){
+        if(!e.dead&&dist(player,e)<range){
+          e.hp-=dmg;e.slow=0.5;e.slowTimer=3;e.hitFlash=0.06;
+          spawnDmg(e.x,e.y,dmg,'#8cf');
+          if(e.hp<=0)killEnemy(e);
+        }
+      }
+      addShake(2);
+    }},
+};
+
+// 检查并触发组合技
+function checkCombos(){
+  const p=player;
+  if(p.combos)return; // 已有组合
+  const ws=p.weapons;
+  for(let i=0;i<ws.length;i++){
+    for(let j=0;j<ws.length;j++){
+      if(i===j)continue;
+      if(ws[i].lv>=5&&ws[j].lv>=1){
+        const key1=ws[i].type+'+'+ws[j].type;
+        const key2=ws[j].type+'+'+ws[i].type;
+        const comboDef=COMBOS[key1]||COMBOS[key2];
+        if(comboDef&&!ws[i].combo){
+          ws[i].combo={...comboDef,lv:Math.min(ws[i].lv,ws[j].lv),cd:0};
+          return;
+        }
+      }
+    }
+  }
+}
 const deathTraces=[];
 function killEnemy(e){
   if(e.dead)return;
@@ -298,7 +410,7 @@ function showUpgrades(){
   for(const w of p.weapons){
     if(w.lv<8){
       const d=WEAPONS[w.type];
-      all.push({name:`${d.icon} ${d.name} Lv${w.lv+1}`,desc:d.desc+'（强化）',apply:()=>w.lv++});
+      all.push({name:`${d.icon} ${d.name} Lv${w.lv+1}`,desc:d.desc+'（强化）',apply:()=>{w.lv++;checkCombos()}});
     }
   }
   // 新武器
@@ -370,7 +482,7 @@ function spawnWave(dt){
   if(G.spawnTimer>0)return;
   const w=G.wave;
   G.spawnTimer=Math.max(0.15,0.8-w*0.05);
-  const cnt=Math.min(20,2+Math.floor(w*0.8));
+  const cnt=Math.min(30,4+Math.floor(w*1.6));
   const hpMult=1+w*0.25;
   const pool=getMonsterPool(w);
   
@@ -423,6 +535,8 @@ function update(dt){
     const d=WEAPONS[w.type];
     if(d.update)d.update(p,enemies,w.lv,dt);
     if(d.attack){w.cd-=dt;if(w.cd<=0){d.attack(p,enemies,w.lv);w.cd=Math.max(0.15,d.baseCd*Math.pow(0.92,w.lv-1)*(p.cdMul||1))}}
+    // 组合技触发
+    if(w.combo)w.combo.trigger(w.combo,dt);
   }
   
   // 敌人
@@ -524,7 +638,7 @@ function update(dt){
       G.combos++;G.comboTimer=1;
       while(p.xp>=p.xpToNext){
         p.xp-=p.xpToNext;p.level++;
-        p.xpToNext=Math.floor(15*Math.pow(1.25,p.level-1));
+        p.xpToNext=Math.floor(20*Math.pow(1.4,p.level-1));
         p.maxHp+=8;p.hp=Math.min(p.hp+30,p.maxHp);
         playSound('levelup');
         showUpgrades();
@@ -573,23 +687,60 @@ function drawPlayer(){
   }
   X.globalAlpha=1;
   
-  // 身体（圆角矩形）
+  // 身体（根据角色不同外观）
+  const cid=selectedChar;
   X.fillStyle=col;X.shadowColor=col;X.shadowBlur=15;
-  X.beginPath();
-  X.roundRect(sx-8,sy-4,16,18,4);X.fill();
-  X.shadowBlur=0;
-  // 头
-  X.fillStyle=col;X.shadowColor=col;X.shadowBlur=12;
-  X.beginPath();X.arc(sx,sy-12,10,0,PI2);X.fill();
-  X.shadowBlur=0;
-  // 眼睛（会根据移动方向看向一侧）
+  
+  if(cid==='wang'){
+    // 老王：圆胖身体+秃顶+白背心
+    X.beginPath();X.ellipse(sx,sy+2,12,16,0,0,PI2);X.fill();X.shadowBlur=0;
+    // 秃顶头
+    X.fillStyle='#ddb88c';X.beginPath();X.arc(sx,sy-14,11,0,PI2);X.fill();
+    // 白背心
+    X.fillStyle='#eee';X.fillRect(sx-7,sy-3,14,12);
+    // 蒲扇
+    X.fillStyle='#a86';X.beginPath();X.ellipse(sx+16,sy+4,5,8,0.3,0,PI2);X.fill();
+  }else if(cid==='intern'){
+    // 实习生：瘦小身体+大书包+帆布鞋
+    X.beginPath();X.roundRect(sx-6,sy-4,12,15,3);X.fill();X.shadowBlur=0;
+    // 头（略小）
+    X.fillStyle=col;X.beginPath();X.arc(sx,sy-12,8,0,PI2);X.fill();
+    // 书包
+    X.fillStyle='#666';X.fillRect(sx-10,sy-2,6,10);
+    // 帆布鞋
+    X.fillStyle='#fff';X.fillRect(sx-6,sy+11,5,3);X.fillRect(sx+1,sy+11,5,3);
+  }else{
+    // 社畜：格子衫+眼镜+咖啡杯
+    X.beginPath();X.roundRect(sx-8,sy-4,16,18,4);X.fill();X.shadowBlur=0;
+    // 头
+    X.fillStyle=col;X.beginPath();X.arc(sx,sy-12,10,0,PI2);X.fill();
+    // 格子衫纹理
+    X.strokeStyle='rgba(0,0,0,0.2)';X.lineWidth=1;
+    for(let gx=sx-6;gx<sx+8;gx+=5){X.beginPath();X.moveTo(gx,sy-3);X.lineTo(gx,sy+14);X.stroke()}
+    for(let gy=sy-2;gy<sy+14;gy+=5){X.beginPath();X.moveTo(sx-7,gy);X.lineTo(sx+8,gy);X.stroke()}
+    // 咖啡杯
+    X.fillStyle='#854';X.fillRect(sx+12,sy+2,5,8);X.fillRect(sx+13,sy,3,3);
+    X.fillStyle='#f80';X.fillRect(sx+13,sy+3,3,3);
+  }
+  
+  // 眼睛（通用）
   const lookX=mDir.x||0,lookY=mDir.y||0;
   X.fillStyle='#fff';
-  X.beginPath();X.arc(sx-3+lookX*2,sy-13+lookY*1.5,3.5,0,PI2);X.fill();
-  X.beginPath();X.arc(sx+4+lookX*2,sy-13+lookY*1.5,3.5,0,PI2);X.fill();
+  const eyeY=cid==='wang'?sy-15:sy-13;
+  const eyeR=cid==='wang'?3:cid==='intern'?2.5:3.5;
+  X.beginPath();X.arc(sx-3+lookX*2,eyeY+lookY*1.5,eyeR,0,PI2);X.fill();
+  X.beginPath();X.arc(sx+4+lookX*2,eyeY+lookY*1.5,eyeR,0,PI2);X.fill();
   X.fillStyle='#111';
-  X.beginPath();X.arc(sx-3+lookX*3,sy-13+lookY*2,1.8,0,PI2);X.fill();
-  X.beginPath();X.arc(sx+4+lookX*3,sy-13+lookY*2,1.8,0,PI2);X.fill();
+  X.beginPath();X.arc(sx-3+lookX*3,eyeY+1+lookY*2,eyeR*0.5,0,PI2);X.fill();
+  X.beginPath();X.arc(sx+4+lookX*3,eyeY+1+lookY*2,eyeR*0.5,0,PI2);X.fill();
+  
+  // 社畜眼镜
+  if(cid==='slave'){
+    X.strokeStyle='#aaa';X.lineWidth=1.5;
+    X.beginPath();X.arc(sx-3,eyeY,4.5,0,PI2);X.stroke();
+    X.beginPath();X.arc(sx+4,eyeY,4.5,0,PI2);X.stroke();
+    X.beginPath();X.moveTo(sx+1,eyeY);X.lineTo(sx,eyeY);X.stroke();
+  }
   // 脚（走路动画）
   const walkT=G.time*8;
   const walking=Math.abs(mDir.x)>0.1||Math.abs(mDir.y)>0.1||Math.abs(p.vx||0)>0.1;
@@ -863,6 +1014,14 @@ function drawHUD(){
   X.font='12px sans-serif';X.fillStyle='#aaa';
   const wi=p.weapons.map(w=>`${WEAPONS[w.type].icon}${WEAPONS[w.type].name}Lv${w.lv}`).join('  ');
   X.fillText(wi,hx,hy+65);
+  // 组合技显示
+  for(const w of p.weapons){
+    if(w.combo){
+      X.fillStyle='#ff0';X.font='bold 12px sans-serif';
+      X.fillText(`🔗 ${w.combo.name}`,hx,hy+80);
+      break;
+    }
+  }
   
   // 波次
   X.textAlign='right';X.fillStyle='#888';X.font='12px sans-serif';
@@ -939,7 +1098,7 @@ function drawMenu(){
   X.globalAlpha=1;
   
   X.fillStyle='#555';X.font='12px sans-serif';
-  X.fillText('v0.6 · 真男人不回头',W/2,H/2+100);
+  X.fillText('v0.7 · 真男人不回头',W/2,H/2+100);
   X.textAlign='left';
 }
 
