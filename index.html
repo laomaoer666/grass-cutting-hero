@@ -84,8 +84,14 @@ addEventListener('keydown',initAudio);
 
 // ==================== BOSS弹幕 ====================
 const bossBullets=[];
+const traps=[];
 function spawnBossBullet(x,y,angle,speed,dmg,color,size){
   bossBullets.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,dmg,color:color||'#f44',size:size||6,life:4});
+}
+function spawnTrap(x,y){
+  // 陷阱：地面红色区域，持续一段时间，碰到就受伤
+  traps.push({x,y,radius:rnd(25,40),life:8+Math.random()*4,dps:20+G.wave*2,
+    pulsePhase:Math.random()*PI2});
 }
 
 // ==================== 相机 ====================
@@ -386,6 +392,12 @@ function killEnemy(e){
   if(e.type==='boss'){
     addShake(10);
     spawnP(e.x,e.y,'#f44',30,6,0.8,6);
+    G.bossKills++;
+    G.spawnMul*=2;
+    // 第二个BOSS死后开始生成陷阱
+    if(G.bossKills>=2&&!G.trapsEnabled){
+      G.trapsEnabled=true;
+    }
   }
   // 酸液池
   if(e.acidOnDeath){
@@ -450,10 +462,11 @@ const G={
     player.speed=160*ch.speedMul;player.magnet=90;player.armor=0;
     player.healOnKill=0;player.critChance=0;player.dmgMul=1;player.cdMul=1;
     player.weapons=[{type:'sword',lv:1,cd:0}];player.invincible=0;
-    enemies.length=0;gems.length=0;particles.length=0;dmgTexts.length=0;bossBullets.length=0;
+    enemies.length=0;gems.length=0;particles.length=0;dmgTexts.length=0;bossBullets.length=0;traps.length=0;
     this.swordFx=[];this.lightFx=[];this.fireFx=[];this.iceFx=[];
     this.time=0;this.kills=0;this.spawnTimer=0;this.wave=1;this.waveTimer=0;
     this.combos=0;this.comboTimer=0;
+    this.bossKills=0;this.spawnMul=1;this.trapsEnabled=false;this._trapTimer=0;
     this.state='play';
   },
   gameOver(){
@@ -482,7 +495,7 @@ function spawnWave(dt){
   if(G.spawnTimer>0)return;
   const w=G.wave;
   G.spawnTimer=Math.max(0.15,0.8-w*0.05);
-  const cnt=Math.min(30,4+Math.floor(w*1.6));
+  const cnt=Math.min(40,6+Math.floor(w*2))*(G.spawnMul||1);
   const hpMult=1+w*0.25;
   const pool=getMonsterPool(w);
   
@@ -501,6 +514,15 @@ function spawnWave(dt){
       playSound('boss');
       const a=Math.random()*PI2,d=rnd(350,450);
       spawnEnemy('boss',player.x+Math.cos(a)*d,player.y+Math.sin(a)*d,hpMult);
+    }
+  }
+  // 陷阱生成（第二个BOSS死后）
+  if(G.trapsEnabled){
+    G._trapTimer=(G._trapTimer||0)+dt;
+    if(G._trapTimer>3){G._trapTimer=0;
+      // 在玩家附近随机生成陷阱
+      const ta=Math.random()*PI2,td=rnd(100,300);
+      spawnTrap(player.x+Math.cos(ta)*td,player.y+Math.sin(ta)*td);
     }
   }
 }
@@ -623,6 +645,19 @@ function update(dt){
       spawnDmg(p.x,p.y-20,Math.round(b.dmg),'#f44');
       playSound('hurt');addShake(3);
       bossBullets.splice(i,1);
+      if(p.hp<=0){G.gameOver();return}
+    }
+  }
+  
+  // 陷阱更新
+  for(let i=traps.length-1;i>=0;i--){
+    const t=traps[i];
+    t.life-=dt;
+    if(t.life<=0){traps.splice(i,1);continue}
+    // 碰到就受伤（持续伤害）
+    if(dist(p,t)<t.radius+14){
+      p.hp-=t.dps*dt;
+      if(Math.random()<0.15){spawnDmg(p.x,p.y-15,Math.round(t.dps*dt),'#f22');playSound('hurt')}
       if(p.hp<=0){G.gameOver();return}
     }
   }
@@ -936,6 +971,30 @@ function drawBossBullets(){
   }
 }
 
+function drawTraps(){
+  for(const t of traps){
+    const sx=t.x-cam.x,sy=t.y-cam.y;
+    const pulse=0.5+Math.sin(G.time*4+t.pulsePhase)*0.3;
+    const alpha=Math.min(1,t.life/2)*0.5;
+    // 外圈警告
+    X.globalAlpha=alpha*0.4;
+    X.strokeStyle='#f22';X.lineWidth=2;
+    X.setLineDash([6,4]);
+    X.beginPath();X.arc(sx,sy,t.radius,0,PI2);X.stroke();
+    X.setLineDash([]);
+    // 内圈伤害区
+    X.globalAlpha=alpha*pulse*0.35;
+    X.fillStyle='#f00';
+    X.beginPath();X.arc(sx,sy,t.radius*0.8,0,PI2);X.fill();
+    // 中心骷髅标记
+    X.globalAlpha=alpha*0.7;
+    X.fillStyle='#f44';X.font='bold 16px sans-serif';X.textAlign='center';
+    X.fillText('☠',sx,sy+5);
+    X.textAlign='left';
+    X.globalAlpha=1;
+  }
+}
+
 function drawBossHP(){
   // 找活着的BOSS
   const boss=enemies.find(e=>e.type==='boss'&&!e.dead);
@@ -1098,7 +1157,7 @@ function drawMenu(){
   X.globalAlpha=1;
   
   X.fillStyle='#555';X.font='12px sans-serif';
-  X.fillText('v0.7 · 真男人不回头',W/2,H/2+100);
+  X.fillText('v0.8 · 真男人不回头',W/2,H/2+100);
   X.textAlign='left';
 }
 
@@ -1206,6 +1265,7 @@ function loop(now){
     drawGrid();
     drawDeathTraces();
     drawGems();
+    drawTraps();
     for(const e of enemies)drawEnemy(e);
     drawPlayer();
     drawFx();
