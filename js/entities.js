@@ -702,6 +702,9 @@ function drawEnemies() {
       ctx.beginPath();
       ctx.arc(0, 0, s, 0, PI2);
       ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
     }
     else if (e.shape === 'tri') {
       ctx.beginPath();

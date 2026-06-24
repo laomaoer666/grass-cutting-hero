@@ -337,6 +337,24 @@ function drawGame(t) {
     drawEnemies();
     drawPlayer(t);
     drawProjectiles();
+
+    // DEBUG: 直接画敌人位置标记
+    for (var di = 0; di < enemies.length; di++) {
+        var de = enemies[di];
+        if (de.dead) continue;
+        var dsx = de.x - cam.x + W / 2;
+        var dsy = de.y - cam.y + H / 2;
+        ctx.fillStyle = '#f00';
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.arc(dsx, dsy, 20, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('E' + di, dsx, dsy + 4);
+    }
     drawEffects(t);
     drawParticles();
     drawDmgTexts();
