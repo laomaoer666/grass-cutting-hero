@@ -307,29 +307,33 @@ function spawnWave(dt){
   G.spawnTimer-=dt;
   if(G.spawnTimer>0)return;
   const w=G.wave;
-  G.spawnTimer=Math.max(0.2,1.2-w*0.04);
-  const cnt=Math.min(12,1+Math.floor(w/1.5));
-  const hpMult=1+w*0.18;
+  // 更快生成：起始0.8s，每波-0.05s，最低0.15s
+  G.spawnTimer=Math.max(0.15,0.8-w*0.05);
+  // 更多怪物：起始2-3个，增长更快，上限20
+  const cnt=Math.min(20,2+Math.floor(w*0.8));
+  // 血量成长更快
+  const hpMult=1+w*0.25;
   
   for(let i=0;i<cnt;i++){
-    const a=Math.random()*PI2,d=rnd(450,600);
+    const a=Math.random()*PI2,d=rnd(400,550);
     const x=player.x+Math.cos(a)*d,y=player.y+Math.sin(a)*d;
     let type='slime';
     const r=Math.random();
-    if(w>=12&&r<0.04)type='boss';
-    else if(w>=6&&r<0.12)type='ogre';
-    else if(w>=8&&r<0.15)type='tank';
-    else if(w>=7&&r<0.2)type='splitter';
-    else if(w>=5&&r<0.25)type='acid';
-    else if(w>=4&&r<0.35)type='ghost';
-    else if(w>=3&&r<0.45)type='skeleton';
-    else if(w>=2&&r<0.55)type='bat';
-    else if(w>=5&&r<0.65)type='worm';
+    if(w>=10&&r<0.06)type='boss';
+    else if(w>=5&&r<0.14)type='ogre';
+    else if(w>=6&&r<0.22)type='tank';
+    else if(w>=5&&r<0.3)type='splitter';
+    else if(w>=4&&r<0.38)type='acid';
+    else if(w>=3&&r<0.48)type='ghost';
+    else if(w>=2&&r<0.58)type='skeleton';
+    else if(w>=1&&r<0.68)type='bat';
+    else if(w>=3&&r<0.78)type='worm';
     spawnEnemy(type,x,y,hpMult);
   }
   
+  // 波次升级更快：18s一波
   G.waveTimer+=dt;
-  if(G.waveTimer>25){G.waveTimer=0;G.wave++;if(G.wave%5===0)playSound('boss')}
+  if(G.waveTimer>18){G.waveTimer=0;G.wave++;if(G.wave%5===0)playSound('boss')}
 }
 
 // ==================== 更新 ====================
