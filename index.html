@@ -132,6 +132,12 @@ function spawnEnemy(type,x,y,hpMult=1){
 }
 
 // ==================== 玩家 ====================
+const CHARACTERS={
+  slave:{id:'slave',name:'社畜',emoji:'💻',color:'#6a8',speedMul:1.10,hpMul:1.0,atkMul:1.0,xpMul:1.0,desc:'格子衫+黑眼圈+咖啡杯',stats:'移速 +10%'},
+  wang:{id:'wang',name:'老王',emoji:'👴',color:'#da8',speedMul:1.0,hpMul:1.20,atkMul:0.95,xpMul:1.0,desc:'秃顶+白背心+蒲扇',stats:'血量 +20% | 攻速 -5%'},
+  intern:{id:'intern',name:'实习生',emoji:'📚',color:'#8af',speedMul:1.0,hpMul:0.90,atkMul:1.0,xpMul:1.15,desc:'大眼镜+马尾+文件夹',stats:'经验 +15% | 血量 -10%'},
+};
+let selectedChar='slave';
 const player={
   x:0,y:0,speed:160,hp:100,maxHp:100,
   xp:0,level:1,xpToNext:15,
@@ -279,9 +285,11 @@ const G={
   combos:0,comboTimer:0,
   start(){
     initAudio();
-    player.x=0;player.y=0;player.hp=100;player.maxHp=100;
+    const ch=CHARACTERS[selectedChar];
+    player.x=0;player.y=0;
+    player.maxHp=Math.round(100*ch.hpMul);player.hp=player.maxHp;
     player.xp=0;player.level=1;player.xpToNext=15;
-    player.speed=160;player.magnet=90;player.armor=0;
+    player.speed=160*ch.speedMul;player.magnet=90;player.armor=0;
     player.weapons=[{type:'sword',lv:1,cd:0}];player.invincible=0;
     enemies.length=0;gems.length=0;particles.length=0;dmgTexts.length=0;
     this.swordFx=[];this.lightFx=[];this.fireFx=[];this.iceFx=[];
@@ -437,15 +445,17 @@ function drawGrid(){
 
 function drawPlayer(){
   const p=player,sx=p.x-cam.x,sy=p.y-cam.y;
+  const ch=CHARACTERS[selectedChar];
+  const col=ch?ch.color:'#0f8';
   // 拖尾
   for(const t of p.trail){
     const a=t.t/0.15;
-    X.globalAlpha=a*0.3;X.fillStyle='#0f8';
+    X.globalAlpha=a*0.3;X.fillStyle=col;
     X.beginPath();X.arc(t.x-cam.x,t.y-cam.y,14*a,0,PI2);X.fill();
   }
   X.globalAlpha=1;
   // 主体
-  X.fillStyle='#0f8';X.shadowColor='#0f8';X.shadowBlur=18;
+  X.fillStyle=col;X.shadowColor=col;X.shadowBlur=18;
   X.beginPath();X.arc(sx,sy,15,0,PI2);X.fill();
   X.shadowBlur=0;
   // 眼睛
@@ -679,7 +689,53 @@ function drawMenu(){
   X.globalAlpha=1;
   
   X.fillStyle='#555';X.font='12px sans-serif';
-  X.fillText('v0.2 · 真男人不回头',W/2,H/2+100);
+  X.fillText('v0.3 · 真男人不回头',W/2,H/2+100);
+  X.textAlign='left';
+}
+
+const charSelectRects=[];
+function drawCharSelect(){
+  X.fillStyle='rgba(0,0,0,0.85)';X.fillRect(0,0,W,H);
+  X.textAlign='center';
+  X.fillStyle='#ff0';X.shadowColor='#ff0';X.shadowBlur=10;
+  X.font='bold 24px sans-serif';
+  X.fillText('🎭 选择角色',W/2,60);
+  X.shadowBlur=0;
+  
+  const chars=Object.values(CHARACTERS);
+  const cardH=100,gap=12,startY=100;
+  const cardW=Math.min(320,W-40);
+  charSelectRects.length=0;
+  
+  chars.forEach((ch,i)=>{
+    const y=startY+i*(cardH+gap);
+    const x=W/2-cardW/2;
+    charSelectRects.push({x,y,w:cardW,h:cardH,id:ch.id});
+    
+    // 卡片背景
+    X.fillStyle='rgba(255,255,255,0.08)';
+    X.strokeStyle='rgba(255,255,255,0.2)';X.lineWidth=1.5;
+    X.beginPath();X.roundRect(x,y,cardW,cardH,12);X.fill();X.stroke();
+    
+    // 角色圆形头像
+    X.fillStyle=ch.color;X.shadowColor=ch.color;X.shadowBlur=8;
+    X.beginPath();X.arc(x+40,y+cardH/2,22,0,PI2);X.fill();X.shadowBlur=0;
+    
+    // 角色名+emoji
+    X.fillStyle='#fff';X.font='bold 18px sans-serif';X.textAlign='left';
+    X.fillText(ch.emoji+' '+ch.name,x+75,y+30);
+    
+    // 描述
+    X.fillStyle='#aaa';X.font='12px sans-serif';
+    X.fillText(ch.desc,x+75,y+50);
+    
+    // 属性
+    X.fillStyle='#0f0';X.font='12px sans-serif';
+    X.fillText(ch.stats,x+75,y+70);
+  });
+  
+  X.textAlign='center';X.fillStyle='#555';X.font='11px sans-serif';
+  X.fillText('点击选择角色',W/2,startY+chars.length*(cardH+gap)+20);
   X.textAlign='left';
 }
 
@@ -688,8 +744,17 @@ function fmtTime(s){return`${Math.floor(s/60)}:${String(Math.floor(s%60)).padSta
 // ==================== 点击处理 ====================
 C.addEventListener('click',e=>{
   initAudio();
-  if(G.state==='menu'){G.start();return}
-  if(G.state==='gameover'){G.start();return}
+  if(G.state==='menu'){G.state='charSelect';return}
+  if(G.state==='charSelect'){
+    const mx=e.clientX,my=e.clientY;
+    for(const r of charSelectRects){
+      if(mx>=r.x&&mx<=r.x+r.w&&my>=r.y&&my<=r.y+r.h){
+        selectedChar=r.id;G.start();return;
+      }
+    }
+    return;
+  }
+  if(G.state==='gameover'){G.state='menu';return}
   if(G.state==='upgrade'){
     const bw=280,bh=60,startY=H/2-60;
     const mx=e.clientX,my=e.clientY;
@@ -723,6 +788,7 @@ function loop(now){
   X.fillStyle='#0a0a1a';X.fillRect(0,0,W,H);
   
   if(G.state==='menu'){drawMenu()}
+  else if(G.state==='charSelect'){drawCharSelect()}
   else{
     // 相机震动
     X.save();
