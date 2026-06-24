@@ -878,7 +878,7 @@ function drawEnemy(e){
       X.quadraticCurveTo(sx+e.size*1.8,sy-e.size*(1+wingFlap),sx+e.size*0.8,sy+e.size*0.3);
       X.quadraticCurveTo(sx+e.size*0.3,sy-e.size*0.2,sx,sy);
       X.fill();
-            if(!flash){X.fillStyle='#f44'
+      if(!flash){X.fillStyle='#f44';X.beginPath();X.arc(sx-3,sy-1,2,0,PI2);X.fill();X.beginPath();X.arc(sx+3,sy-1,2,0,PI2);X.fill()}
       break;
     case 'skeleton':
       // 骷髅：头+肋骨
