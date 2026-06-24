@@ -25,8 +25,8 @@ function addShake(amount) {
 }
 
 function updateCam(target, dt) {
-    cam.x += (target.x - W / 2 - cam.x) * 0.12;
-    cam.y += (target.y - H / 2 - cam.y) * 0.12;
+    cam.x += (target.x - cam.x) * 0.12;
+    cam.y += (target.y - cam.y) * 0.12;
     if (cam.shake > 0) {
         cam.shake *= 0.9;
         if (cam.shake < 0.1) cam.shake = 0;

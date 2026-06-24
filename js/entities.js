@@ -549,9 +549,9 @@ function updateEffects(dt) {
    14. drawPlayer
    ============================================================ */
 function drawPlayer(t) {
-  var px = player.x - cam.x;
-  var py = player.y - cam.y;
-  var r = 10;
+  var px = player.x - cam.x + W / 2;
+  var py = player.y - cam.y + H / 2;
+  var r = 14;
 
   ctx.save();
   ctx.translate(px, py);
@@ -1174,7 +1174,7 @@ function updateSpawning(dt) {
 function drawProjectiles() {
   for (var i = 0; i < projectiles.length; i++) {
     var p = projectiles[i];
-    var sx = p.x - cam.x, sy = p.y - cam.y;
+    var sx = p.x - cam.x + W / 2, sy = p.y - cam.y + H / 2;
     if (sx < -50 || sx > W + 50 || sy < -50 || sy > H + 50) continue;
     ctx.fillStyle = p.color || '#f80';
     ctx.shadowColor = p.color || '#f80';

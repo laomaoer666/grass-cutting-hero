@@ -481,53 +481,36 @@ function applyUpgrade(optId) {
 /* ===== Insurance ===== */
 
 function requestInsurance() {
-    let dialog = document.getElementById('insurance-dialog');
-    if (!dialog) {
-        dialog = document.createElement('div');
-        dialog.id = 'insurance-dialog';
-        dialog.innerHTML =
-            '<div class="ins-box">' +
-            '<div class="ins-icon">🐱</div>' +
-            '<div class="ins-title">' + INSURANCE.name + '</div>' +
-            '<div class="ins-desc">' + INSURANCE.desc + '</div>' +
-            '<div class="ins-buttons">' +
-            '<button id="ins-yes" class="ins-btn ins-yes">使用!</button>' +
-            '<button id="ins-no" class="ins-btn ins-no">取消</button>' +
-            '</div></div>';
-        document.body.appendChild(dialog);
-        document.getElementById('ins-yes').onclick = function () { activateInsurance(); };
-        document.getElementById('ins-no').onclick = function () { closeInsurance(); };
-    }
-    dialog.style.display = 'flex';
+    if (player.insurance <= 0) return;
+    let el = document.getElementById('insuranceConfirm');
+    if (el) el.style.display = 'flex';
 }
 
 function activateInsurance() {
-    player.insurance = true;
+    player.insurance--;
 
     /* kill all enemies */
     for (let i = enemies.length - 1; i >= 0; i--) {
         let e = enemies[i];
         if (!e.dead) {
-            spawnParticle(e.x, e.y, 6);
+            spawnParticle(e.x, e.y, e.color, 6);
             killEnemy(e);
         }
     }
 
     /* big screen effects */
-    addShake(12, 0.8);
+    addShake(12);
     showBigText('🐱 保命猫猫发动!', '#ff44cc');
     catEffectTimer = 3;
 
     if (SFX && SFX.insurance) SFX.insurance();
 
     closeInsurance();
-    /* re-show upgrade (insurance doesn't count as a level pick — player still needs to choose) */
-    showUpgradeOptions();
 }
 
 function closeInsurance() {
-    let dialog = document.getElementById('insurance-dialog');
-    if (dialog) dialog.style.display = 'none';
+    let el = document.getElementById('insuranceConfirm');
+    if (el) el.style.display = 'none';
     /* go back to upgrade screen so player can pick something else */
     let container = document.getElementById('upgrade-options');
     if (container) container.style.display = 'flex';
