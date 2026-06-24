@@ -119,11 +119,15 @@ const ENEMY_TYPES={
   boss:{hp:800,speed:22,dmg:45,size:32,color:'#f33',xp:120,shape:'star'},
   ghost:{hp:35,speed:65,dmg:12,size:11,color:'#88f',xp:6,shape:'circle'},
   worm:{hp:45,speed:30,dmg:10,size:10,color:'#6a3',xp:5,shape:'circle'},
+  acid:{hp:40,speed:50,dmg:10,size:12,color:'#6f0',xp:8,shape:'circle',acidOnDeath:true},
+  tank:{hp:400,speed:18,dmg:35,size:28,color:'#864',xp:30,shape:'diamond'},
+  splitter:{hp:55,speed:55,dmg:12,size:15,color:'#c6f',xp:8,shape:'circle',children:3},
 };
 function spawnEnemy(type,x,y,hpMult=1){
   const t=ENEMY_TYPES[type];
   const e={type,x,y,...t,hp:t.hp*hpMult,maxHp:t.hp*hpMult,dmg:t.dmg*(1+(hpMult-1)*0.3),
-    hitFlash:0,burning:0,burnDmg:0,slow:0,slowTimer:0,dead:false};
+    hitFlash:0,burning:0,burnDmg:0,slow:0,slowTimer:0,dead:false,
+    acidOnDeath:t.acidOnDeath||false,children:t.children||0};
   enemies.push(e);
 }
 
@@ -205,6 +209,7 @@ const WEAPONS={
 };
 
 // ==================== 敌人死亡 ====================
+const deathTraces=[];
 function killEnemy(e){
   if(e.dead)return;
   e.dead=true;
@@ -218,6 +223,18 @@ function killEnemy(e){
   if(e.type==='boss'){
     addShake(10);
     spawnP(e.x,e.y,'#f44',30,6,0.8,6);
+  }
+  // 酸液池
+  if(e.acidOnDeath){
+    deathTraces.push({x:e.x,y:e.y,radius:35,life:4,maxLife:4,color:'#2a0',dps:15});
+  }
+  // 分裂
+  if(e.children>0){
+    for(let i=0;i<e.children;i++){
+      const a=PI2/e.children*i+rnd(0,1);
+      const d=e.size+5;
+      const child=spawnEnemy('slime',e.x+Math.cos(a)*d,e.y+Math.sin(a)*d,0.4);
+    }
   }
 }
 
@@ -293,10 +310,13 @@ function spawnWave(dt){
     const r=Math.random();
     if(w>=12&&r<0.04)type='boss';
     else if(w>=6&&r<0.12)type='ogre';
-    else if(w>=4&&r<0.2)type='ghost';
-    else if(w>=3&&r<0.35)type='skeleton';
-    else if(w>=2&&r<0.5)type='bat';
-    else if(w>=5&&r<0.6)type='worm';
+    else if(w>=8&&r<0.15)type='tank';
+    else if(w>=7&&r<0.2)type='splitter';
+    else if(w>=5&&r<0.25)type='acid';
+    else if(w>=4&&r<0.35)type='ghost';
+    else if(w>=3&&r<0.45)type='skeleton';
+    else if(w>=2&&r<0.55)type='bat';
+    else if(w>=5&&r<0.65)type='worm';
     spawnEnemy(type,x,y,hpMult);
   }
   
@@ -355,6 +375,17 @@ function update(dt){
   }
   // 清理远处敌人
   for(let i=enemies.length-1;i>=0;i--){if(enemies[i].dead||dist(player,enemies[i])>1000)enemies.splice(i,1)}
+  
+  // 酸液池更新
+  for(let i=deathTraces.length-1;i>=0;i--){
+    const t=deathTraces[i];
+    t.life-=dt;
+    if(t.life<=0){deathTraces.splice(i,1);continue}
+    if(dist(p,t)<t.radius){
+      p.hp-=t.dps*dt;
+      if(p.hp<=0){G.gameOver();return}
+    }
+  }
   
   // 宝石
   for(const g of gems){
@@ -497,6 +528,17 @@ function drawFx(){
   for(const f of G.iceFx){
     X.globalAlpha=f.life/f.max*0.4;X.strokeStyle='#8cf';X.lineWidth=2;
     X.beginPath();X.arc(f.x-cam.x,f.y-cam.y,f.range*(1-f.life/f.max*0.3),0,PI2);X.stroke();X.globalAlpha=1;
+  }
+}
+
+function drawDeathTraces(){
+  for(const t of deathTraces){
+    const sx=t.x-cam.x,sy=t.y-cam.y;
+    const alpha=t.life/t.maxLife*0.5;
+    X.globalAlpha=alpha;
+    X.fillStyle=t.color;
+    X.beginPath();X.arc(sx,sy,t.radius,0,PI2);X.fill();
+    X.globalAlpha=1;
   }
 }
 
@@ -687,6 +729,7 @@ function loop(now){
     if(cam.shake>0.5)X.translate(rnd(-cam.shake,cam.shake),rnd(-cam.shake,cam.shake));
     
     drawGrid();
+    drawDeathTraces();
     drawGems();
     for(const e of enemies)drawEnemy(e);
     drawPlayer();
