@@ -1143,10 +1143,10 @@ function updateSpawning(dt) {
   // spawn at screen edge + buffer
   var side = rndI(0, 3);
   var bx, by;
-  if (side === 0) { bx = player.x - W / 2 - 40; by = player.y + rnd() * H - H / 2; }
-  else if (side === 1) { bx = player.x + W / 2 + 40; by = player.y + rnd() * H - H / 2; }
-  else if (side === 2) { bx = player.x + rnd() * W - W / 2; by = player.y - H / 2 - 40; }
-  else { bx = player.x + rnd() * W - W / 2; by = player.y + H / 2 + 40; }
+  if (side === 0) { bx = player.x - W / 3; by = player.y + rnd() * H * 0.6 - H * 0.3; }
+  else if (side === 1) { bx = player.x + W / 3; by = player.y + rnd() * H * 0.6 - H * 0.3; }
+  else if (side === 2) { bx = player.x + rnd() * W * 0.6 - W * 0.3; by = player.y - H / 3; }
+  else { bx = player.x + rnd() * W * 0.6 - W * 0.3; by = player.y + H / 3; }
 
   // HP multiplier scales with time
   var hpMul = 1 + _enemyRamp * 0.008;

@@ -112,9 +112,20 @@ function update(dt) {
     updateWeapons(dt);
     checkCombos();
 
-    // 敌人更新
-    updateEnemies(dt);
+    // 敌人更新 - 带try-catch
+    try { updateEnemies(dt); } catch(err) { console.error('updateEnemies ERROR:', err); }
     updateSpawning(dt);
+
+    // 确保敌人向玩家移动（备用方案）
+    for (var _ei = 0; _ei < enemies.length; _ei++) {
+        var _ee = enemies[_ei];
+        if (_ee.dead) continue;
+        var _edx = player.x - _ee.x;
+        var _edy = player.y - _ee.y;
+        var _ed = Math.sqrt(_edx * _edx + _edy * _edy) || 1;
+        _ee.x += (_edx / _ed) * _ee.speed * dt;
+        _ee.y += (_edy / _ed) * _ee.speed * dt;
+    }
 
     // 子弹更新
     updateProjectiles(dt);
