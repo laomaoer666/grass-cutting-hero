@@ -232,11 +232,6 @@ function drawHUD(t) {
     ctx.textAlign = 'right';
     ctx.fillText(`第${GAME.wave}波`, W - 45, pad + xpH + 38);
 
-    // DEBUG: 敌人数量 + 保险
-    ctx.fillStyle = '#0ff';
-    ctx.font = '11px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`敌人:${enemies.length} 保险:${p.insurance} spawnCD:${typeof _spawnTimer!=='undefined'?_spawnTimer.toFixed(1):'?'}`, 10, H - 15);
 
     // BGM按钮
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -338,23 +333,6 @@ function drawGame(t) {
     drawPlayer(t);
     drawProjectiles();
 
-    // DEBUG: 直接画敌人位置标记
-    for (var di = 0; di < enemies.length; di++) {
-        var de = enemies[di];
-        if (de.dead) continue;
-        var dsx = de.x - cam.x + W / 2;
-        var dsy = de.y - cam.y + H / 2;
-        ctx.fillStyle = '#f00';
-        ctx.globalAlpha = 0.8;
-        ctx.beginPath();
-        ctx.arc(dsx, dsy, 20, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = '#fff';
-        ctx.font = '10px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('E' + di, dsx, dsy + 4);
-    }
     drawEffects(t);
     drawParticles();
     drawDmgTexts();

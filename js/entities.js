@@ -250,12 +250,7 @@ function spawnXPGem(x, y, value) {
    7. updateEnemies
    ============================================================ */
 function updateEnemies(dt) {
-  // DEBUG: 强制移动第一个敌人
-  if (enemies.length > 0 && !enemies[0].dead) {
-    enemies[0].x += 50 * dt; // 每秒50像素向右
-  }
-
-  for (var i = 0; i < enemies.length; i++) {
+  for
     var e = enemies[i];
     if (e.dead) continue;
 
@@ -707,9 +702,6 @@ function drawEnemies() {
       ctx.beginPath();
       ctx.arc(0, 0, s, 0, PI2);
       ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
     }
     else if (e.shape === 'tri') {
       ctx.beginPath();
@@ -1143,10 +1135,10 @@ function updateSpawning(dt) {
   // spawn at screen edge + buffer
   var side = rndI(0, 3);
   var bx, by;
-  if (side === 0) { bx = player.x - W / 3; by = player.y + rnd() * H * 0.6 - H * 0.3; }
-  else if (side === 1) { bx = player.x + W / 3; by = player.y + rnd() * H * 0.6 - H * 0.3; }
-  else if (side === 2) { bx = player.x + rnd() * W * 0.6 - W * 0.3; by = player.y - H / 3; }
-  else { bx = player.x + rnd() * W * 0.6 - W * 0.3; by = player.y + H / 3; }
+  if (side === 0) { bx = player.x - W / 2 - 40; by = player.y + rnd() * H - H / 2; }
+  else if (side === 1) { bx = player.x + W / 2 + 40; by = player.y + rnd() * H - H / 2; }
+  else if (side === 2) { bx = player.x + rnd() * W - W / 2; by = player.y - H / 2 - 40; }
+  else { bx = player.x + rnd() * W - W / 2; by = player.y + H / 2 + 40; }
 
   // HP multiplier scales with time
   var hpMul = 1 + _enemyRamp * 0.008;

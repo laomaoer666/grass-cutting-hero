@@ -134,7 +134,11 @@ function getMovement() {
 // ============ 工具函数 ============
 function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 function angle(a, b) { return Math.atan2(b.y - a.y, b.x - a.x); }
-function rnd(a, b) { return Math.random() * (b - a) + a; }
+function rnd(a, b) {
+    if (a === undefined) return Math.random();
+    if (b === undefined) return Math.random() * a;
+    return Math.random() * (b - a) + a;
+}
 function rndI(a, b) { return Math.floor(rnd(a, b + 1)); }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 function fmtTime(s) { return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`; }
@@ -209,12 +213,10 @@ const GAME = {
 // ============ 游戏主循环 ============
 let lastTime = 0;
 let catEffectTimer = 0;
-let lastDt = 0;
 
 function gameLoop(timestamp) {
     const dt = Math.min(0.05, (timestamp - lastTime) / 1000);
     lastTime = timestamp;
-    lastDt = dt;
 
     if (GAME.state === 'playing') {
         update(dt);
@@ -224,15 +226,6 @@ function gameLoop(timestamp) {
     ctx.fillStyle = COLORS.bg;
     ctx.fillRect(0, 0, W, H);
 
-    // DEBUG: 最简单的测试 - 红色方块
-    if (GAME.state === 'playing') {
-        ctx.fillStyle = '#f00';
-        ctx.fillRect(10, H/2 - 30, 200, 20);
-        ctx.fillStyle = '#fff';
-        ctx.font = '14px sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillText('E=' + (typeof enemies !== 'undefined' ? enemies.length : '?') + ' dt=' + (typeof lastDt !== 'undefined' ? lastDt.toFixed(4) : '?'), 15, H/2 - 15);
-    }
 
     if (GAME.state === 'menu') {
         drawMenu(timestamp);
@@ -243,28 +236,6 @@ function gameLoop(timestamp) {
     } else if (GAME.state === 'gameover') {
         drawGame(timestamp);
         drawGameOver();
-    }
-
-    // DEBUG: 在最顶层直接画敌人位置
-    if (GAME.state === 'playing' && typeof enemies !== 'undefined' && enemies.length > 0) {
-        ctx.fillStyle = '#f00';
-        ctx.globalAlpha = 0.9;
-        ctx.font = 'bold 16px sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillText('ENEMIES:' + enemies.length + ' cam:' + cam.x.toFixed(0) + ',' + cam.y.toFixed(0), 10, H / 2);
-        for (var _di = 0; _di < Math.min(enemies.length, 5); _di++) {
-            var _de = enemies[_di];
-            if (_de.dead) continue;
-            var _dsx = _de.x - cam.x + W / 2;
-            var _dsy = _de.y - cam.y + H / 2;
-            ctx.beginPath();
-            ctx.arc(_dsx, _dsy, 25, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#fff';
-            ctx.fillText('E' + _di + ':(' + _de.x.toFixed(0) + ',' + _de.y.toFixed(0) + ')→(' + _dsx.toFixed(0) + ',' + _dsy.toFixed(0) + ')', 10, H / 2 + 20 + _di * 18);
-            ctx.fillStyle = '#f00';
-        }
-        ctx.globalAlpha = 1;
     }
 
     requestAnimationFrame(gameLoop);
