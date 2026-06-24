@@ -232,6 +232,12 @@ function drawHUD(t) {
     ctx.textAlign = 'right';
     ctx.fillText(`第${GAME.wave}波`, W - 45, pad + xpH + 38);
 
+    // DEBUG: 敌人数量 + 保险
+    ctx.fillStyle = '#0ff';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`敌人:${enemies.length} 保险:${p.insurance} spawnCD:${typeof _spawnTimer!=='undefined'?_spawnTimer.toFixed(1):'?'}`, 10, H - 15);
+
     // BGM按钮
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
     ctx.fillRect(W - 40, pad + xpH, 30, 20);
