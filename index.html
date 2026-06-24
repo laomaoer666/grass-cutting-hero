@@ -116,9 +116,33 @@ function spawnBossBullet(x,y,angle,speed,dmg,color,size){
   bossBullets.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,dmg,color:color||'#f44',size:size||6,life:4});
 }
 function spawnTrap(x,y){
-  // 陷阱：地面红色区域，持续一段时间，碰到就受伤
   traps.push({x,y,radius:rnd(25,40),life:8+Math.random()*4,dps:20+G.wave*2,
     pulsePhase:Math.random()*PI2});
+}
+
+// ==================== 临时道具 ====================
+const items=[];
+const ITEM_TYPES={
+  speed:{name:'加速',icon:'⚡',color:'#ff0',duration:5,
+    apply(p){p.speed*=1.5},remove(p){p.speed/=1.5}},
+  heal:{name:'血包',icon:'❤',color:'#f44',duration:0,
+    apply(p){p.hp=Math.min(p.hp+p.maxHp*0.4,p.maxHp)}},
+  shield:{name:'无敌',icon:'🛡',color:'#0ff',duration:3,
+    apply(p){p.invincible=3}},
+};
+function spawnItem(x,y){
+  const types=Object.keys(ITEM_TYPES);
+  const type=types[rndI(0,types.length-1)];
+  items.push({x,y,type,...ITEM_TYPES[type],life:12,size:12,a:Math.random()*PI2});
+}
+function applyItem(item){
+  const p=player;
+  playSound('item');
+  spawnP(item.x,item.y,item.color,10,4,0.4,3);
+  item.apply(p);
+  if(item.duration>0){
+    setTimeout(()=>{item.remove(p)},item.duration*1000);
+  }
 }
 
 // ==================== 相机 ====================
@@ -213,7 +237,7 @@ const WEAPONS={
       addShake(3);
     }},
   // 🔮 持续AOE — 围着你转，清小怪利器
-  orb:{name:'旋风斩',icon:'🌀',desc:'持续旋转切割周围敌人',color:'#0ff',
+  orb:{name:'护身法宝',icon:'🌀',desc:'持续旋转切割周围敌人',color:'#0ff',
     baseDmg:8,baseCd:0,baseRange:70,
     update(p,ens,lvl,dt){
       const cnt=2+Math.floor(lvl/2),r=70+lvl*8,dmg=8+lvl*5;
@@ -221,7 +245,7 @@ const WEAPONS={
       for(let i=0;i<cnt;i++){
         const a=p.orbAngle+(PI2/cnt)*i;
         const ox=p.x+Math.cos(a)*r,oy=p.y+Math.sin(a)*r;
-        for(const e of ens){if(!e.dead&&dist({x:ox,y:oy},e)<20){e.hp-=dmg*dt*5;e.hitFlash=0.02}}
+        for(const e of ens){if(!e.dead&&dist({x:ox,y:oy},e)<20){e.hp-=dmg*dt*5;e.hitFlash=0.02;if(Math.random()<0.02)playSound('orb')}}
       }
     }},
   // ⚡ 弹射群伤 — 打一个弹一串，怪越多越爽
@@ -255,9 +279,9 @@ const WEAPONS={
     }},
   // 🔥 范围持续 — 点燃烧血，越打越疼
   fire:{name:'地狱火',icon:'🔥',desc:'范围灼烧，持续掉血',color:'#f80',
-    baseDmg:12,baseCd:1.5,baseRange:140,
+    baseDmg:8,baseCd:1.5,baseRange:140,
     attack(p,ens,lvl){
-      const range=140+lvl*18,dmg=12+lvl*4;
+      const range=140+lvl*18,dmg=8+lvl*3;
       playSound('fire');
       for(const e of ens){
         if(dist(p,e)<range){
@@ -285,6 +309,7 @@ const WEAPONS={
           if(e.hp<=0)killEnemy(e)
         }
       }
+      playSound('ice');
       G.iceFx.push({x:p.x,y:p.y,range,life:0.4,max:0.4});
       addShake(2);
     }},
@@ -335,7 +360,7 @@ const COMBOS={
       }
       addShake(4);
     }},
-  'lightning+orb':{name:'⚡🌀 电磁风暴',desc:'旋风斩附带闪电链，持续电击周围',
+  'lightning+orb':{name:'⚡🌀 电磁风暴',desc:'护身法宝附带闪电链，持续电击周围',
     trigger(combo,dt){
       combo.cd-=dt;if(combo.cd>0)return;combo.cd=1.8;
       const range=120+combo.lv*15,dmg=30+combo.lv*10;
@@ -368,7 +393,7 @@ const COMBOS={
       if(t.hp<=0)killEnemy(t);
       addShake(3);
     }},
-  'orb+ice':{name:'🌀❄ 冰霜旋风',desc:'旋风斩变成冰刃，大范围减速+伤害',
+  'orb+ice':{name:'🌀❄ 冰霜旋风',desc:'护身法宝变成冰刃，大范围减速+伤害',
     trigger(combo,dt){
       combo.cd-=dt;if(combo.cd>0)return;combo.cd=2.2;
       const range=140+combo.lv*18,dmg=25+combo.lv*8;
@@ -412,6 +437,8 @@ function killEnemy(e){
   spawnP(e.x,e.y,e.color,6,3,0.4,4);
   // 吸血
   if(player.healOnKill>0)player.hp=Math.min(player.hp+player.healOnKill,player.maxHp);
+  // 道具掉落（2%概率）
+  if(Math.random()<0.02)spawnItem(e.x,e.y);
   // 掉落宝石
   const v=e.xp>=25?25:e.xp>=10?10:3;
   const cnt=Math.ceil(e.xp/v);
@@ -466,6 +493,7 @@ function showUpgrades(){
   all.push({name:'💥 暴击率+12%',desc:`暴击概率+12% (当前${Math.round((p.critChance||0)*100)}%)`,apply:()=>{p.critChance=(p.critChance||0)+0.12}});
   all.push({name:'💪 全伤害+15%',desc:'所有武器伤害+15%',apply:()=>{p.dmgMul=(p.dmgMul||1)*1.15}});
   all.push({name:'⏱ 攻速+10%',desc:'所有武器冷却-10%',apply:()=>{p.cdMul=(p.cdMul||1)*0.9}});
+  all.push({name:'🛡 保险',desc:`死亡时原地复活一次（${p.revives? '已拥有':'未拥有'}）`,apply:()=>{p.revives=(p.revives||0)+1}});
   
   // 随机选3个
   G.upgradeOpts=[];
@@ -487,9 +515,9 @@ const G={
     player.maxHp=Math.round(100*ch.hpMul);player.hp=player.maxHp;
     player.xp=0;player.level=1;player.xpToNext=15;
     player.speed=160*ch.speedMul;player.magnet=90;player.armor=0;
-    player.healOnKill=0;player.critChance=0;player.dmgMul=1;player.cdMul=1;
+    player.healOnKill=0;player.critChance=0;player.dmgMul=1;player.cdMul=1;player.revives=0;
     player.weapons=[{type:'sword',lv:1,cd:0}];player.invincible=0;
-    enemies.length=0;gems.length=0;particles.length=0;dmgTexts.length=0;bossBullets.length=0;traps.length=0;
+    enemies.length=0;gems.length=0;particles.length=0;dmgTexts.length=0;bossBullets.length=0;traps.length=0;items.length=0;
     this.swordFx=[];this.lightFx=[];this.fireFx=[];this.iceFx=[];
     this.time=0;this.kills=0;this.spawnTimer=0;this.wave=1;this.waveTimer=0;
     this.combos=0;this.comboTimer=0;
@@ -497,6 +525,14 @@ const G={
     this.state='play';
   },
   gameOver(){
+    if(player.revives>0){
+      player.revives--;
+      player.hp=player.maxHp*0.5;
+      player.invincible=3;
+      spawnP(player.x,player.y,'#ff0',20,5,0.6,5);
+      playSound('shield');
+      return;
+    }
     this.state='gameover';
   }
 };
@@ -727,6 +763,18 @@ function update(dt){
     }
   }
   for(let i=gems.length-1;i>=0;i--){if(gems[i].collected||gems[i].life<=0)gems.splice(i,1)}
+  
+  // 道具更新
+  for(let i=items.length-1;i>=0;i--){
+    const it=items[i];
+    it.life-=dt;it.a+=dt*3;
+    if(it.life<=0){items.splice(i,1);continue}
+    // 磁铁吸引
+    const d=dist(p,it);
+    if(d<p.magnet*0.7){const a=ang(it,p);it.x+=Math.cos(a)*300*dt;it.y+=Math.sin(a)*300*dt}
+    // 拾取
+    if(d<22){applyItem(it);items.splice(i,1)}
+  }
   
   // 连击
   if(G.comboTimer>0){G.comboTimer-=dt;if(G.comboTimer<=0)G.combos=0}
@@ -1063,6 +1111,23 @@ function drawGems(){
   }
 }
 
+function drawItems(){
+  for(const it of items){
+    const sx=it.x-cam.x,sy=it.y-cam.y;
+    // 浮动+发光
+    const bob=Math.sin(it.a)*4;
+    X.globalAlpha=Math.min(1,it.life/3);
+    X.fillStyle=it.color;X.shadowColor=it.color;X.shadowBlur=12;
+    X.beginPath();X.arc(sx,sy+bob,it.size,0,PI2);X.fill();
+    X.shadowBlur=0;
+    // 图标
+    X.fillStyle='#fff';X.font='bold 14px sans-serif';X.textAlign='center';
+    X.fillText(it.icon,sx,sy+bob+5);
+    X.textAlign='left';
+    X.globalAlpha=1;
+  }
+}
+
 function drawParticles(){
   for(const p of particles){
     X.globalAlpha=p.life/p.maxLife;X.fillStyle=p.color;
@@ -1197,7 +1262,7 @@ function drawMenu(){
   X.globalAlpha=1;
   
   X.fillStyle='#555';X.font='12px sans-serif';
-  X.fillText('v0.9 · 真男人不回头',W/2,H/2+100);
+  X.fillText('v1.0 · 真男人不回头',W/2,H/2+100);
   X.textAlign='left';
 }
 
@@ -1305,6 +1370,7 @@ function loop(now){
     drawGrid();
     drawDeathTraces();
     drawGems();
+    drawItems();
     drawTraps();
     for(const e of enemies)drawEnemy(e);
     drawPlayer();
