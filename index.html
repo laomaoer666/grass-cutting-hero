@@ -156,65 +156,101 @@ const player={
 
 // ==================== 武器定义 ====================
 const WEAPONS={
-  sword:{name:'剑气斩',icon:'⚔',desc:'挥出弧形剑气',color:'#0f8',
-    baseDmg:18,baseCd:0.7,baseRange:90,
+  // ⚔ 单体高伤 — BOSS杀手，攻速慢但一刀一个
+  sword:{name:'斩杀刀',icon:'⚔',desc:'高伤单体，斩杀低血敌人',color:'#f44',
+    baseDmg:35,baseCd:0.9,baseRange:85,
     attack(p,ens,lvl){
       if(!ens.length)return;
       let nd=null,md=1e9;
       for(const e of ens){const d=dist(p,e);if(d<md){md=d;nd=e}}
-      const range=90+lvl*15,dmg=18+lvl*6,a=ang(p,nd);
+      const range=85+lvl*12,dmg=35+lvl*12,a=ang(p,nd);
       playSound('sword');
       for(const e of ens){
         if(dist(p,e)>range)continue;
         let da=Math.abs(ang(p,e)-a);if(da>PI)da=PI2-da;
-        if(da<0.7){e.hp-=dmg;e.hitFlash=0.08;spawnDmg(e.x,e.y-e.size,dmg,'#0f8');if(e.hp<=0)killEnemy(e)}
+        if(da<0.6){
+          // 斩杀：血量低于30%直接秒杀
+          const finalDmg=(e.hp/e.maxHp<0.3)?e.hp:dmg;
+          e.hp-=finalDmg;e.hitFlash=0.08;
+          spawnDmg(e.x,e.y-e.size,Math.round(finalDmg),e.hp<=0?'#f00':'#f44');
+          if(e.hp<=0)killEnemy(e)
+        }
       }
       G.swordFx.push({x:p.x,y:p.y,a,range,life:0.15,max:0.15});
-      addShake(2);
+      addShake(3);
     }},
-  orb:{name:'护身球',icon:'🔮',desc:'环绕的能量球',color:'#0ff',
-    baseDmg:12,baseCd:0,baseRange:65,
+  // 🔮 持续AOE — 围着你转，清小怪利器
+  orb:{name:'旋风斩',icon:'🌀',desc:'持续旋转切割周围敌人',color:'#0ff',
+    baseDmg:8,baseCd:0,baseRange:70,
     update(p,ens,lvl,dt){
-      const cnt=2+Math.floor(lvl/2),r=65+lvl*10,dmg=12+lvl*4;
-      p.orbAngle=(p.orbAngle||0)+dt*2.5;
+      const cnt=2+Math.floor(lvl/2),r=70+lvl*8,dmg=8+lvl*5;
+      p.orbAngle=(p.orbAngle||0)+dt*3.5;
       for(let i=0;i<cnt;i++){
         const a=p.orbAngle+(PI2/cnt)*i;
         const ox=p.x+Math.cos(a)*r,oy=p.y+Math.sin(a)*r;
-        for(const e of ens){if(!e.dead&&dist({x:ox,y:oy},e)<18){e.hp-=dmg*dt*4;e.hitFlash=0.02}}
+        for(const e of ens){if(!e.dead&&dist({x:ox,y:oy},e)<20){e.hp-=dmg*dt*5;e.hitFlash=0.02}}
       }
     }},
-  lightning:{name:'闪电链',icon:'⚡',desc:'随机雷击敌人',color:'#ff0',
-    baseDmg:30,baseCd:1.4,baseRange:220,
+  // ⚡ 弹射群伤 — 打一个弹一串，怪越多越爽
+  lightning:{name:'连锁闪电',icon:'⚡',desc:'击中敌人后弹射到附近目标',color:'#ff0',
+    baseDmg:25,baseCd:1.2,baseRange:250,
     attack(p,ens,lvl){
-      const range=220+lvl*30,ts=ens.filter(e=>dist(p,e)<range);
+      const range=250+lvl*25,ts=ens.filter(e=>dist(p,e)<range&&!e.dead);
       if(!ts.length)return;
       playSound('lightning');
-      const cnt=1+Math.floor(lvl/3),dmg=30+lvl*10;
-      for(let i=0;i<Math.min(cnt,ts.length);i++){
-        const t=ts[rndI(0,ts.length-1)];
-        t.hp-=dmg;t.hitFlash=0.1;spawnDmg(t.x,t.y-t.size,dmg,'#ff0');
-        G.lightFx.push({x:t.x,y:t.y,life:0.25});
-        if(t.hp<=0)killEnemy(t);
+      const dmg=25+lvl*8,bounces=2+lvl;
+      // 找最近的打第一下
+      let target=ts.reduce((a,b)=>dist(p,a)<dist(p,b)?a:b);
+      const hit=new Set();
+      for(let i=0;i<Math.min(bounces,ts.length);i++){
+        if(!target||target.dead)break;
+        target.hp-=dmg;target.hitFlash=0.1;
+        spawnDmg(target.x,target.y-target.size,dmg,'#ff0');
+        G.lightFx.push({x:target.x,y:target.y,life:0.25});
+        if(target.hp<=0)killEnemy(target);
+        hit.add(target);
+        // 弹到最近的未命中目标
+        let next=null,nd=200; // 弹射距离200
+        for(const e of ts){
+          if(hit.has(e)||e.dead)continue;
+          const d=dist(target,e);
+          if(d<nd){nd=d;next=e}
+        }
+        target=next;
       }
-      addShake(3);
+      addShake(2);
     }},
-  fire:{name:'火焰波',icon:'🔥',desc:'向四周喷射火焰',color:'#f80',
-    baseDmg:15,baseCd:1.8,baseRange:130,
+  // 🔥 范围持续 — 点燃烧血，越打越疼
+  fire:{name:'地狱火',icon:'🔥',desc:'范围灼烧，持续掉血',color:'#f80',
+    baseDmg:12,baseCd:1.5,baseRange:140,
     attack(p,ens,lvl){
-      const range=130+lvl*20,dmg=15+lvl*5;
+      const range=140+lvl*18,dmg=12+lvl*4;
       playSound('fire');
       for(const e of ens){
-        if(dist(p,e)<range){e.hp-=dmg;e.hitFlash=0.08;e.burning=2.5;e.burnDmg=6+lvl*2;spawnDmg(e.x,e.y-e.size,dmg,'#f80');if(e.hp<=0)killEnemy(e)}
+        if(dist(p,e)<range){
+          e.hp-=dmg;e.hitFlash=0.08;
+          // 强力灼烧：6秒持续伤害
+          e.burning=6;e.burnDmg=8+lvl*3;
+          spawnDmg(e.x,e.y-e.size,dmg,'#f80');
+          if(e.hp<=0)killEnemy(e)
+        }
       }
       G.fireFx.push({x:p.x,y:p.y,range,life:0.35,max:0.35});
       addShake(2);
     }},
-  ice:{name:'冰冻新星',icon:'❄',desc:'冻结周围敌人',color:'#8cf',
-    baseDmg:10,baseCd:2.5,baseRange:100,
+  // ❄ 控制减速 — 不靠伤害吃饭，靠控场
+  ice:{name:'绝对零度',icon:'❄',desc:'大范围冰冻减速，怪物变慢60%',color:'#8cf',
+    baseDmg:8,baseCd:2.0,baseRange:120,
     attack(p,ens,lvl){
-      const range=100+lvl*15,dmg=10+lvl*4;
+      const range=120+lvl*20,dmg=8+lvl*3;
       for(const e of ens){
-        if(dist(p,e)<range){e.hp-=dmg;e.hitFlash=0.08;e.slow=0.3;e.slowTimer=2+lvl*0.5;spawnDmg(e.x,e.y-e.size,dmg,'#8cf');if(e.hp<=0)killEnemy(e)}
+        if(dist(p,e)<range){
+          e.hp-=dmg;e.hitFlash=0.08;
+          // 强力减速60%，持续3秒+
+          e.slow=0.6;e.slowTimer=3+lvl*0.8;
+          spawnDmg(e.x,e.y-e.size,dmg,'#8cf');
+          if(e.hp<=0)killEnemy(e)
+        }
       }
       G.iceFx.push({x:p.x,y:p.y,range,life:0.4,max:0.4});
       addShake(2);
@@ -229,6 +265,8 @@ function killEnemy(e){
   G.kills++;
   playSound('kill');
   spawnP(e.x,e.y,e.color,6,3,0.4,4);
+  // 吸血
+  if(player.healOnKill>0)player.hp=Math.min(player.hp+player.healOnKill,player.maxHp);
   // 掉落宝石
   const v=e.xp>=25?25:e.xp>=10?10:3;
   const cnt=Math.ceil(e.xp/v);
@@ -270,12 +308,13 @@ function showUpgrades(){
       all.push({name:`✨ ${d.icon} ${d.name}`,desc:d.desc,apply:()=>p.weapons.push({type:k,lv:1,cd:0})});
     }
   }
-  // 属性
-  all.push({name:'❤ 生命+25',desc:`最大HP+25，回复25HP (当前${p.maxHp})`,apply:()=>{p.maxHp+=25;p.hp=Math.min(p.hp+25,p.maxHp)}});
-  all.push({name:'🏃 移速+12%',desc:`移动更快 (当前${Math.round(p.speed)})`,apply:()=>p.speed*=1.12});
-  all.push({name:'🧲 磁铁+35',desc:`吸取范围+35 (当前${Math.round(p.magnet)})`,apply:()=>p.magnet+=35});
-  all.push({name:'🛡 护甲+3',desc:`减少受伤 (当前${p.armor})`,apply:()=>p.armor+=3});
-  all.push({name:'💪 攻击+10%',desc:'所有武器伤害+10%',apply:()=>{for(const w of p.weapons)WEAPONS[w.type].baseDmg*=1.1}});
+  // 属性升级
+  all.push({name:'❤ 吸血回复',desc:'每次击杀回复5HP',apply:()=>{p.healOnKill=(p.healOnKill||0)+5}});
+  all.push({name:'🏃 移速+15%',desc:`移动更快 (当前${Math.round(p.speed)})`,apply:()=>p.speed*=1.15});
+  all.push({name:'🧲 磁铁+40',desc:`吸取范围+40 (当前${Math.round(p.magnet)})`,apply:()=>p.magnet+=40});
+  all.push({name:'💥 暴击率+12%',desc:`暴击概率+12% (当前${Math.round((p.critChance||0)*100)}%)`,apply:()=>{p.critChance=(p.critChance||0)+0.12}});
+  all.push({name:'💪 全伤害+15%',desc:'所有武器伤害+15%',apply:()=>{p.dmgMul=(p.dmgMul||1)*1.15}});
+  all.push({name:'⏱ 攻速+10%',desc:'所有武器冷却-10%',apply:()=>{p.cdMul=(p.cdMul||1)*0.9}});
   
   // 随机选3个
   G.upgradeOpts=[];
@@ -297,6 +336,7 @@ const G={
     player.maxHp=Math.round(100*ch.hpMul);player.hp=player.maxHp;
     player.xp=0;player.level=1;player.xpToNext=15;
     player.speed=160*ch.speedMul;player.magnet=90;player.armor=0;
+    player.healOnKill=0;player.critChance=0;player.dmgMul=1;player.cdMul=1;
     player.weapons=[{type:'sword',lv:1,cd:0}];player.invincible=0;
     enemies.length=0;gems.length=0;particles.length=0;dmgTexts.length=0;bossBullets.length=0;
     this.swordFx=[];this.lightFx=[];this.fireFx=[];this.iceFx=[];
@@ -310,41 +350,43 @@ const G={
 };
 
 // ==================== 生成敌人 ====================
+// 根据波次构建怪物池
+function getMonsterPool(w){
+  const pool=['slime']; // 基础怪
+  if(w>=1)pool.push('bat');      // 快速小怪
+  if(w>=2)pool.push('skeleton'); // 中等怪
+  if(w>=3)pool.push('ghost','worm'); // 隐形+蠕虫
+  if(w>=4)pool.push('acid');     // 酸液怪
+  if(w>=5)pool.push('splitter','ogre'); // 分裂+肉搏
+  if(w>=6)pool.push('tank');     // 肉盾
+  // 后期增加精英比例
+  if(w>=8){pool.push('ogre','tank','splitter')} // 多加一轮权重
+  if(w>=10){pool.push('acid','ghost')} // 更多精英
+  return pool;
+}
+
 function spawnWave(dt){
   G.spawnTimer-=dt;
   if(G.spawnTimer>0)return;
   const w=G.wave;
-  // 更快生成：起始0.8s，每波-0.05s，最低0.15s
   G.spawnTimer=Math.max(0.15,0.8-w*0.05);
-  // 更多怪物：起始2-3个，增长更快，上限20
   const cnt=Math.min(20,2+Math.floor(w*0.8));
-  // 血量成长更快
   const hpMult=1+w*0.25;
+  const pool=getMonsterPool(w);
   
   for(let i=0;i<cnt;i++){
     const a=Math.random()*PI2,d=rnd(400,550);
     const x=player.x+Math.cos(a)*d,y=player.y+Math.sin(a)*d;
-    let type='slime';
-    const r=Math.random();
-    if(w>=10&&r<0.06)type='boss';
-    else if(w>=5&&r<0.14)type='ogre';
-    else if(w>=6&&r<0.22)type='tank';
-    else if(w>=5&&r<0.3)type='splitter';
-    else if(w>=4&&r<0.38)type='acid';
-    else if(w>=3&&r<0.48)type='ghost';
-    else if(w>=2&&r<0.58)type='skeleton';
-    else if(w>=1&&r<0.68)type='bat';
-    else if(w>=3&&r<0.78)type='worm';
+    // 从池中随机选，保证多样性
+    const type=pool[rndI(0,pool.length-1)];
     spawnEnemy(type,x,y,hpMult);
   }
   
-  // 波次升级更快：18s一波
   G.waveTimer+=dt;
   if(G.waveTimer>18){
     G.waveTimer=0;G.wave++;
     if(G.wave%5===0){
       playSound('boss');
-      // 必定刷新BOSS
       const a=Math.random()*PI2,d=rnd(350,450);
       spawnEnemy('boss',player.x+Math.cos(a)*d,player.y+Math.sin(a)*d,hpMult);
     }
@@ -380,7 +422,7 @@ function update(dt){
   for(const w of p.weapons){
     const d=WEAPONS[w.type];
     if(d.update)d.update(p,enemies,w.lv,dt);
-    if(d.attack){w.cd-=dt;if(w.cd<=0){d.attack(p,enemies,w.lv);w.cd=Math.max(0.2,d.baseCd*Math.pow(0.92,w.lv-1))}}
+    if(d.attack){w.cd-=dt;if(w.cd<=0){d.attack(p,enemies,w.lv);w.cd=Math.max(0.15,d.baseCd*Math.pow(0.92,w.lv-1)*(p.cdMul||1))}}
   }
   
   // 敌人
@@ -793,7 +835,7 @@ function drawMenu(){
   X.globalAlpha=1;
   
   X.fillStyle='#555';X.font='12px sans-serif';
-  X.fillText('v0.4 · 真男人不回头',W/2,H/2+100);
+  X.fillText('v0.5 · 真男人不回头',W/2,H/2+100);
   X.textAlign='left';
 }
 
