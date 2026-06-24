@@ -549,8 +549,8 @@ function updateEffects(dt) {
    14. drawPlayer
    ============================================================ */
 function drawPlayer(t) {
-  var px = player.x - cam.x + W / 2;
-  var py = player.y - cam.y + H / 2;
+  var px = player.x - cam.x;
+  var py = player.y - cam.y;
   var r = 10;
 
   ctx.save();
