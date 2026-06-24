@@ -518,6 +518,25 @@ function getMonsterPool(w){
 }
 
 function spawnWave(dt){
+  // 波次计时器每帧都累加（修复：之前只在出怪时才加dt导致波次不涨）
+  G.waveTimer+=dt;
+  if(G.waveTimer>18){
+    G.waveTimer=0;G.wave++;
+    if(G.wave%5===0){
+      playSound('boss');
+      const a=Math.random()*PI2,d=rnd(350,450);
+      const bt=getBossType(G.wave);
+      const hpMult=(1+G.wave*0.25)*(1+G.kills*0.0008);
+      const bx=player.x+Math.cos(a)*d,by=player.y+Math.sin(a)*d;
+      const e=spawnEnemy('boss',bx,by,hpMult);
+      const boss=enemies[enemies.length-1];
+      boss.bossName=bt.name;boss.color=bt.color;
+      boss.hp=bt.hp*hpMult;boss.maxHp=bt.hp*hpMult;
+      boss.dmg=bt.dmg*(1+(hpMult-1)*0.3);
+      boss.size=bt.size;boss.speed=bt.speed;
+      boss.attacks=bt.attacks;
+    }
+  }
   G.spawnTimer-=dt;
   if(G.spawnTimer>0)return;
   const w=G.wave;
@@ -534,24 +553,6 @@ function spawnWave(dt){
     spawnEnemy(type,x,y,hpMult);
   }
   
-  G.waveTimer+=dt;
-  if(G.waveTimer>18){
-    G.waveTimer=0;G.wave++;
-    if(G.wave%5===0){
-      playSound('boss');
-      const a=Math.random()*PI2,d=rnd(350,450);
-      const bt=getBossType(G.wave);
-      const bx=player.x+Math.cos(a)*d,by=player.y+Math.sin(a)*d;
-      const e=spawnEnemy('boss',bx,by,hpMult);
-      // 覆盖BOSS专属属性
-      const boss=enemies[enemies.length-1];
-      boss.bossName=bt.name;boss.color=bt.color;
-      boss.hp=bt.hp*hpMult;boss.maxHp=bt.hp*hpMult;
-      boss.dmg=bt.dmg*(1+(hpMult-1)*0.3);
-      boss.size=bt.size;boss.speed=bt.speed;
-      boss.attacks=bt.attacks;
-    }
-  }
   // 陷阱生成（第二个BOSS死后）
   if(G.trapsEnabled){
     G._trapTimer=(G._trapTimer||0)+dt;
