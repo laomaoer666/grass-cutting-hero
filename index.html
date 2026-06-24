@@ -1,709 +1,167 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>割草英雄</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>割草英雄 v0.3</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:#0a0a1a;overflow:hidden;touch-action:none;font-family:'Microsoft YaHei','PingFang SC',sans-serif;-webkit-user-select:none;user-select:none}
-canvas{display:block}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a0a1a;touch-action:none;user-select:none;-webkit-user-select:none;font-family:'Microsoft YaHei','PingFang SC',sans-serif}
+canvas{display:block;position:absolute;top:0;left:0;width:100%;height:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;display:none;flex-direction:column;align-items:center;justify-content:center;color:#fff;padding:20px;overflow-y:auto}
+#skillSelect{background:rgba(0,0,0,0.8);z-index:25}
+#skillSelect h3{font-size:22px;margin-bottom:16px;color:#ff0}
+.skill-btn{width:100%;max-width:340px;background:rgba(255,255,255,0.08);border:1.5px solid rgba(255,255,255,0.2);border-radius:12px;padding:12px;margin:6px 0;text-align:left;cursor:pointer;color:#fff;font-size:14px;min-height:65px;display:flex;flex-direction:column;justify-content:center}
+.skill-btn:active{background:rgba(255,255,0,0.15);border-color:#ff0}
+.skill-btn .sname{font-size:16px;font-weight:bold}
+.skill-btn .sdesc{font-size:12px;color:#aaa;margin-top:2px}
+.skill-btn .combo-hint{font-size:11px;color:#fd0;margin-top:3px}
+#gameOver{background:rgba(0,0,0,0.85);z-index:25}
+#gameOver h2{font-size:36px;color:#f33;margin-bottom:16px;text-shadow:0 0 20px #f33}
+.stat-line{font-size:16px;margin:4px 0}
+.restart{font-size:18px;color:#0f0;margin-top:20px;animation:blink 1.2s infinite}
+#skillPanel{background:rgba(0,0,0,0.88);z-index:22;padding:20px}
+#skillPanel .close-btn{position:absolute;top:10px;right:16px;font-size:28px;cursor:pointer}
+#skillPanel h3{font-size:20px;margin-bottom:12px;color:#ff0;text-align:center}
+.panel-section{margin-bottom:14px}
+.panel-section h4{font-size:14px;color:#0ff;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,0.15);padding-bottom:3px}
+.skill-row{font-size:13px;padding:2px 0}
+.combo-row{font-size:12px;padding:2px 0}
+.combo-unlocked{color:#fd0}
+.combo-locked{color:#555}
+#insuranceConfirm{background:rgba(0,0,0,0.7);z-index:24}
+#insuranceConfirm .box{background:#1a1a2e;border:2px solid #f80;border-radius:16px;padding:24px;text-align:center;max-width:280px}
+#insuranceConfirm .box p{font-size:16px;margin-bottom:16px}
+#insuranceConfirm .box button{font-size:16px;padding:10px 28px;border-radius:8px;border:none;cursor:pointer;margin:0 8px}
+#insuranceConfirm .box .yes{background:#f80;color:#fff}
+#insuranceConfirm .box .no{background:#333;color:#fff}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
+<canvas id="gameCanvas"></canvas>
+
+<!-- 升级选择 -->
+<div id="skillSelect" class="overlay">
+<h3>⬆ 升级！选择强化</h3>
+<div id="upgradeOptions"></div>
+</div>
+
+<!-- 技能面板 -->
+<div id="skillPanel" class="overlay">
+<div id="panelContent"></div>
+</div>
+
+<!-- 保险技确认 -->
+<div id="insuranceConfirm" class="overlay">
+<div class="box">
+<p>🐱 确定要流浪猫猫的抗争吗？<br><small>全屏清除</small></p>
+<button class="yes" onclick="activateInsurance()">喵呜！</button>
+<button class="no" onclick="closeInsurance()">算了</button>
+</div>
+</div>
+
+<!-- 游戏结束 -->
+<div id="gameOver" class="overlay">
+<h2>💀 游戏结束</h2>
+<div id="goStats"></div>
+<div class="restart">👆 点击重新开始</div>
+</div>
+
+<!-- 猫咪图片 -->
+<img id="catImg" src="cat_insurance.png" style="display:none">
+
+<!-- 加载脚本 -->
+<script src="js/data.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/skills.js"></script>
+<script src="js/ui.js"></script>
+
 <script>
 'use strict';
-const C=document.getElementById('c'),X=C.getContext('2d');
-let W,H;
-function resize(){W=C.width=innerWidth;H=C.height=innerHeight}
-resize();addEventListener('resize',resize);
 
-// ==================== 音效引擎 ====================
-const AudioCtx=window.AudioContext||window.webkitAudioContext;
-let audioCtx;
-function initAudio(){if(!audioCtx)audioCtx=new AudioCtx()}
-function playSound(type){
-  if(!audioCtx)return;
-  const o=audioCtx.createOscillator(),g=audioCtx.createGain();
-  o.connect(g);g.connect(audioCtx.destination);
-  const t=audioCtx.currentTime;
-  switch(type){
-    case'hit':o.frequency.setValueAtTime(400,t);o.frequency.exponentialRampToValueAtTime(100,t+0.1);g.gain.setValueAtTime(0.15,t);g.gain.exponentialRampToValueAtTime(0.01,t+0.1);o.type='square';o.start(t);o.stop(t+0.1);break;
-    case'kill':o.frequency.setValueAtTime(600,t);o.frequency.exponentialRampToValueAtTime(200,t+0.2);g.gain.setValueAtTime(0.2,t);g.gain.exponentialRampToValueAtTime(0.01,t+0.2);o.type='sawtooth';o.start(t);o.stop(t+0.2);break;
-    case'levelup':o.frequency.setValueAtTime(400,t);o.frequency.setValueAtTime(500,t+0.1);o.frequency.setValueAtTime(600,t+0.2);o.frequency.setValueAtTime(800,t+0.3);g.gain.setValueAtTime(0.2,t);g.gain.exponentialRampToValueAtTime(0.01,t+0.5);o.type='triangle';o.start(t);o.stop(t+0.5);break;
-    case'pickup':o.frequency.setValueAtTime(800,t);o.frequency.exponentialRampToValueAtTime(1200,t+0.08);g.gain.setValueAtTime(0.08,t);g.gain.exponentialRampToValueAtTime(0.01,t+0.08);o.type='sine';o.start(t);o.stop(t+0.08);break;
-    case'hurt':o.frequency.setValueAtTime(200,t);o.frequency.exponentialRampToValueAtTime(80,t+0.15);g.gain.setValueAtTime(0.2,t);g.gain.exponentialRampToValueAtTime(0.01,t+0.15);o.type='sawtooth';o.start(t);o.stop(t+0.15);break;
-    case'sword':o.frequency.setValueAtTime(300,t);o.frequency.exponentialRampToValueAtTime(100,t+0.12);g.gain.setValueAtTime(0.1,t);g.gain.exponentialRampToValueAtTime(0.01,t+0.12);o.type='triangle';o.start(t);o.stop(t+0.12);break;
-    case'lightning':o.frequency.setValueAtTime(100,t);o.frequency.exponentialRampToValueAtTime(2000,t+0.05);o.frequency.exponentialRampToValueAtTime(50,t+0.2);g.gain.setValueAtTime(0.25,t);g.gain.exponentialRampToValueAtTime(0.01,t+0.2);o.type='sawtooth';o.start(t);o.stop(t+0.2);break;
-    case'fire':for(let i=0;i<3;i++){const o2=audioCtx.createOscillator(),g2=audioCtx.createGain();o2.connect(g2);g2.connect(audioCtx.destination);o2.frequency.setValueAtTime(100+i*50,t);o2.frequency.exponentialRampToValueAtTime(50,t+0.3);g2.gain.setValueAtTime(0.08,t);g2.gain.exponentialRampToValueAtTime(0.01,t+0.3);o2.type='sawtooth';o2.start(t+i*0.05);o2.stop(t+0.3+i*0.05)}break;
-    case'boss':o.frequency.setValueAtTime(80,t);o.frequency.setValueAtTime(60,t+0.5);g.gain.setValueAtTime(0.3,t);g.gain.exponentialRampToValueAtTime(0.01,t+1);o.type='sawtooth';o.start(t);o.stop(t+1);break;
-  }
+// 猫咪图片引用
+const catImg = document.getElementById('catImg');
+
+// ============ 主更新函数 ============
+function update(dt) {
+    if (GAME.state !== 'playing') return;
+
+    GAME.time += dt;
+
+    // 玩家移动
+    const mov = getMovement();
+    player.x += mov.x * player.speed * dt;
+    player.y += mov.y * player.speed * dt;
+    if (mov.x !== 0) player.facing = mov.x > 0 ? 1 : -1;
+
+    // 相机跟随
+    updateCam(player, dt);
+
+    // 无敌时间
+    if (player.invincible > 0) player.invincible -= dt;
+
+    // 护盾冷却
+    if (player.shieldCD > 0) player.shieldCD -= dt;
+
+    // 武器更新
+    updateWeapons(dt);
+    checkCombos();
+
+    // 敌人更新
+    updateEnemies(dt);
+    updateSpawning(dt);
+
+    // 子弹更新
+    updateProjectiles(dt);
+
+    // 宝石更新
+    updateXPGems(dt);
+
+    // 死亡痕迹
+    updateDeathTraces(dt);
+
+    // 粒子/文字
+    updateParticles(dt);
+    updateDmgTexts(dt);
+    updateEffects(dt);
+
+    // 清理
+    cleanupDead();
+
+    // 大字提示
+    if (bigTextTimer > 0) bigTextTimer -= dt;
+    if (catEffectTimer > 0) catEffectTimer -= dt;
+
+    // BGM模式
+    if (GAME.bossActive) {
+        BGM.setMode('boss');
+    } else if (enemies.length > 0) {
+        BGM.setMode('combat');
+    } else if (GAME.time > 20) {
+        BGM.setMode('calm');
+    }
+
+    // 检查死亡
+    if (player.hp <= 0) {
+        showGameOver();
+    }
 }
 
-// ==================== 工具 ====================
-const PI=Math.PI,PI2=PI*2;
-const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
-const ang=(a,b)=>Math.atan2(b.y-a.y,b.x-a.x);
-const rnd=(a,b)=>Math.random()*(b-a)+a;
-const rndI=(a,b)=>Math.floor(rnd(a,b+1));
-const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-
-// ==================== 输入 ====================
-const keys={};
-addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if('wasd'.includes(e.key.toLowerCase()))e.preventDefault()});
-addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
-
-const mDir={x:0,y:0};
-let touchId=null,touchStart={x:0,y:0};
-C.addEventListener('touchstart',e=>{
-  initAudio();
-  const t=e.changedTouches[0];
-  touchId=t.identifier;touchStart={x:t.clientX,y:t.clientY};
-  mDir.x=0;mDir.y=0;
-},{passive:false});
-C.addEventListener('touchmove',e=>{
-  for(const t of e.changedTouches){
-    if(t.identifier===touchId){
-      const dx=t.clientX-touchStart.x,dy=t.clientY-touchStart.y;
-      const d=Math.hypot(dx,dy);
-      if(d>15){mDir.x=dx/d;mDir.y=dy/d}
-      else{mDir.x=0;mDir.y=0}
+// 键盘数字键选择升级
+window.addEventListener('keydown', (e) => {
+    if (GAME.state === 'upgrade') {
+        const n = parseInt(e.key);
+        if (n >= 1 && n <= 3 && upgradeOptions[n - 1]) {
+            upgradeOptions[n - 1].apply();
+            closeUpgradeUI();
+        }
     }
-  }
-  e.preventDefault();
-},{passive:false});
-C.addEventListener('touchend',e=>{
-  for(const t of e.changedTouches){
-    if(t.identifier===touchId){touchId=null;mDir.x=0;mDir.y=0}
-  }
 });
-
-addEventListener('mousedown',initAudio);
-addEventListener('keydown',initAudio);
-
-// ==================== 相机 ====================
-const cam={x:0,y:0,shake:0};
-function addShake(amount){cam.shake=Math.min(cam.shake+amount,15)}
-
-// ==================== 粒子池 ====================
-const particles=[];
-function spawnP(x,y,color,count,speed,life,size){
-  for(let i=0;i<count;i++){
-    const a=Math.random()*PI2,s=rnd(0.5,1)*speed;
-    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life,maxLife:life,size:rnd(size*0.5,size),color});
-  }
-}
-
-// ==================== 伤害文字 ====================
-const dmgTexts=[];
-function spawnDmg(x,y,text,color='#fff'){
-  dmgTexts.push({x:x+rnd(-8,8),y,text:String(text),color,life:0.7,vy:-2.5});
-}
-
-// ==================== 经验宝石 ====================
-const gems=[];
-function spawnGem(x,y,value){
-  gems.push({x,y,value,size:value>=25?10:value>=10?7:5,
-    color:value>=25?'#f0f':value>=10?'#0ff':'#0f8',
-    life:25,a:Math.random()*PI2});
-}
-
-// ==================== 敌人 ====================
-const enemies=[];
-const ENEMY_TYPES={
-  slime:{hp:25,speed:45,dmg:8,size:13,color:'#3a3',xp:3,shape:'circle'},
-  bat:{hp:15,speed:90,dmg:6,size:9,color:'#a3a',xp:3,shape:'tri'},
-  skeleton:{hp:60,speed:38,dmg:15,size:15,color:'#bbb',xp:8,shape:'diamond'},
-  ogre:{hp:180,speed:28,dmg:28,size:22,color:'#a63',xp:25,shape:'circle'},
-  boss:{hp:800,speed:22,dmg:45,size:32,color:'#f33',xp:120,shape:'star'},
-  ghost:{hp:35,speed:65,dmg:12,size:11,color:'#88f',xp:6,shape:'circle'},
-  worm:{hp:45,speed:30,dmg:10,size:10,color:'#6a3',xp:5,shape:'circle'},
-};
-function spawnEnemy(type,x,y,hpMult=1){
-  const t=ENEMY_TYPES[type];
-  const e={type,x,y,...t,hp:t.hp*hpMult,maxHp:t.hp*hpMult,dmg:t.dmg*(1+(hpMult-1)*0.3),
-    hitFlash:0,burning:0,burnDmg:0,slow:0,slowTimer:0,dead:false};
-  enemies.push(e);
-}
-
-// ==================== 玩家 ====================
-const player={
-  x:0,y:0,speed:160,hp:100,maxHp:100,
-  xp:0,level:1,xpToNext:15,
-  magnet:90,armor:0,
-  weapons:[{type:'sword',lv:1,cd:0}],
-  orbAngle:0,invincible:0,
-  trail:[],
-};
-
-// ==================== 武器定义 ====================
-const WEAPONS={
-  sword:{name:'剑气斩',icon:'⚔',desc:'挥出弧形剑气',color:'#0f8',
-    baseDmg:18,baseCd:0.7,baseRange:90,
-    attack(p,ens,lvl){
-      if(!ens.length)return;
-      let nd=null,md=1e9;
-      for(const e of ens){const d=dist(p,e);if(d<md){md=d;nd=e}}
-      const range=90+lvl*15,dmg=18+lvl*6,a=ang(p,nd);
-      playSound('sword');
-      for(const e of ens){
-        if(dist(p,e)>range)continue;
-        let da=Math.abs(ang(p,e)-a);if(da>PI)da=PI2-da;
-        if(da<0.7){e.hp-=dmg;e.hitFlash=0.08;spawnDmg(e.x,e.y-e.size,dmg,'#0f8');if(e.hp<=0)killEnemy(e)}
-      }
-      G.swordFx.push({x:p.x,y:p.y,a,range,life:0.15,max:0.15});
-      addShake(2);
-    }},
-  orb:{name:'护身球',icon:'🔮',desc:'环绕的能量球',color:'#0ff',
-    baseDmg:12,baseCd:0,baseRange:65,
-    update(p,ens,lvl,dt){
-      const cnt=2+Math.floor(lvl/2),r=65+lvl*10,dmg=12+lvl*4;
-      p.orbAngle=(p.orbAngle||0)+dt*2.5;
-      for(let i=0;i<cnt;i++){
-        const a=p.orbAngle+(PI2/cnt)*i;
-        const ox=p.x+Math.cos(a)*r,oy=p.y+Math.sin(a)*r;
-        for(const e of ens){if(!e.dead&&dist({x:ox,y:oy},e)<18){e.hp-=dmg*dt*4;e.hitFlash=0.02}}
-      }
-    }},
-  lightning:{name:'闪电链',icon:'⚡',desc:'随机雷击敌人',color:'#ff0',
-    baseDmg:30,baseCd:1.4,baseRange:220,
-    attack(p,ens,lvl){
-      const range=220+lvl*30,ts=ens.filter(e=>dist(p,e)<range);
-      if(!ts.length)return;
-      playSound('lightning');
-      const cnt=1+Math.floor(lvl/3),dmg=30+lvl*10;
-      for(let i=0;i<Math.min(cnt,ts.length);i++){
-        const t=ts[rndI(0,ts.length-1)];
-        t.hp-=dmg;t.hitFlash=0.1;spawnDmg(t.x,t.y-t.size,dmg,'#ff0');
-        G.lightFx.push({x:t.x,y:t.y,life:0.25});
-        if(t.hp<=0)killEnemy(t);
-      }
-      addShake(3);
-    }},
-  fire:{name:'火焰波',icon:'🔥',desc:'向四周喷射火焰',color:'#f80',
-    baseDmg:15,baseCd:1.8,baseRange:130,
-    attack(p,ens,lvl){
-      const range=130+lvl*20,dmg=15+lvl*5;
-      playSound('fire');
-      for(const e of ens){
-        if(dist(p,e)<range){e.hp-=dmg;e.hitFlash=0.08;e.burning=2.5;e.burnDmg=6+lvl*2;spawnDmg(e.x,e.y-e.size,dmg,'#f80');if(e.hp<=0)killEnemy(e)}
-      }
-      G.fireFx.push({x:p.x,y:p.y,range,life:0.35,max:0.35});
-      addShake(2);
-    }},
-  ice:{name:'冰冻新星',icon:'❄',desc:'冻结周围敌人',color:'#8cf',
-    baseDmg:10,baseCd:2.5,baseRange:100,
-    attack(p,ens,lvl){
-      const range=100+lvl*15,dmg=10+lvl*4;
-      for(const e of ens){
-        if(dist(p,e)<range){e.hp-=dmg;e.hitFlash=0.08;e.slow=0.3;e.slowTimer=2+lvl*0.5;spawnDmg(e.x,e.y-e.size,dmg,'#8cf');if(e.hp<=0)killEnemy(e)}
-      }
-      G.iceFx.push({x:p.x,y:p.y,range,life:0.4,max:0.4});
-      addShake(2);
-    }},
-};
-
-// ==================== 敌人死亡 ====================
-function killEnemy(e){
-  if(e.dead)return;
-  e.dead=true;
-  G.kills++;
-  playSound('kill');
-  spawnP(e.x,e.y,e.color,6,3,0.4,4);
-  // 掉落宝石
-  const v=e.xp>=25?25:e.xp>=10?10:3;
-  const cnt=Math.ceil(e.xp/v);
-  for(let i=0;i<cnt;i++)spawnGem(e.x+rnd(-12,12),e.y+rnd(-12,12),v);
-  if(e.type==='boss'){
-    addShake(10);
-    spawnP(e.x,e.y,'#f44',30,6,0.8,6);
-  }
-}
-
-// ==================== 升级系统 ====================
-function showUpgrades(){
-  G.state='upgrade';
-  const all=[];
-  const p=player;
-  // 已有武器升级
-  for(const w of p.weapons){
-    if(w.lv<8){
-      const d=WEAPONS[w.type];
-      all.push({name:`${d.icon} ${d.name} Lv${w.lv+1}`,desc:d.desc+'（强化）',apply:()=>w.lv++});
-    }
-  }
-  // 新武器
-  const owned=p.weapons.map(w=>w.type);
-  for(const[k,d]of Object.entries(WEAPONS)){
-    if(!owned.includes(k)&&owned.length<4){
-      all.push({name:`✨ ${d.icon} ${d.name}`,desc:d.desc,apply:()=>p.weapons.push({type:k,lv:1,cd:0})});
-    }
-  }
-  // 属性
-  all.push({name:'❤ 生命+25',desc:`最大HP+25，回复25HP (当前${p.maxHp})`,apply:()=>{p.maxHp+=25;p.hp=Math.min(p.hp+25,p.maxHp)}});
-  all.push({name:'🏃 移速+12%',desc:`移动更快 (当前${Math.round(p.speed)})`,apply:()=>p.speed*=1.12});
-  all.push({name:'🧲 磁铁+35',desc:`吸取范围+35 (当前${Math.round(p.magnet)})`,apply:()=>p.magnet+=35});
-  all.push({name:'🛡 护甲+3',desc:`减少受伤 (当前${p.armor})`,apply:()=>p.armor+=3});
-  all.push({name:'💪 攻击+10%',desc:'所有武器伤害+10%',apply:()=>{for(const w of p.weapons)WEAPONS[w.type].baseDmg*=1.1}});
-  
-  // 随机选3个
-  G.upgradeOpts=[];
-  const shuf=all.sort(()=>Math.random()-0.5).slice(0,3);
-  G.upgradeOpts=shuf;
-}
-
-// ==================== 游戏状态 ====================
-const G={
-  state:'menu',time:0,kills:0,
-  spawnTimer:0,wave:1,waveTimer:0,
-  swordFx:[],lightFx:[],fireFx:[],iceFx:[],
-  upgradeOpts:[],
-  combos:0,comboTimer:0,
-  start(){
-    initAudio();
-    player.x=0;player.y=0;player.hp=100;player.maxHp=100;
-    player.xp=0;player.level=1;player.xpToNext=15;
-    player.speed=160;player.magnet=90;player.armor=0;
-    player.weapons=[{type:'sword',lv:1,cd:0}];player.invincible=0;
-    enemies.length=0;gems.length=0;particles.length=0;dmgTexts.length=0;
-    this.swordFx=[];this.lightFx=[];this.fireFx=[];this.iceFx=[];
-    this.time=0;this.kills=0;this.spawnTimer=0;this.wave=1;this.waveTimer=0;
-    this.combos=0;this.comboTimer=0;
-    this.state='play';
-  },
-  gameOver(){
-    this.state='gameover';
-  }
-};
-
-// ==================== 生成敌人 ====================
-function spawnWave(dt){
-  G.spawnTimer-=dt;
-  if(G.spawnTimer>0)return;
-  const w=G.wave;
-  G.spawnTimer=Math.max(0.2,1.2-w*0.04);
-  const cnt=Math.min(12,1+Math.floor(w/1.5));
-  const hpMult=1+w*0.18;
-  
-  for(let i=0;i<cnt;i++){
-    const a=Math.random()*PI2,d=rnd(450,600);
-    const x=player.x+Math.cos(a)*d,y=player.y+Math.sin(a)*d;
-    let type='slime';
-    const r=Math.random();
-    if(w>=12&&r<0.04)type='boss';
-    else if(w>=6&&r<0.12)type='ogre';
-    else if(w>=4&&r<0.2)type='ghost';
-    else if(w>=3&&r<0.35)type='skeleton';
-    else if(w>=2&&r<0.5)type='bat';
-    else if(w>=5&&r<0.6)type='worm';
-    spawnEnemy(type,x,y,hpMult);
-  }
-  
-  G.waveTimer+=dt;
-  if(G.waveTimer>25){G.waveTimer=0;G.wave++;if(G.wave%5===0)playSound('boss')}
-}
-
-// ==================== 更新 ====================
-function update(dt){
-  if(G.state!=='play')return;
-  
-  G.time+=dt;
-  const p=player;
-  p.invincible=Math.max(0,p.invincible-dt);
-  
-  // 移动
-  let dx=0,dy=0;
-  if(keys.w||keys.arrowup)dy=-1;if(keys.s||keys.arrowdown)dy=1;
-  if(keys.a||keys.arrowleft)dx=-1;if(keys.d||keys.arrowright)dx=1;
-  dx+=mDir.x;dy+=mDir.y;
-  const dl=Math.hypot(dx,dy);
-  if(dl>0){p.x+=dx/dl*p.speed*dt;p.y+=dy/dl*p.speed*dt;p.trail.push({x:p.x,y:p.y,t:0.15})}
-  
-  // 拖尾
-  for(const t of p.trail)t.t-=dt;
-  p.trail=p.trail.filter(t=>t.t>0);
-  
-  // 相机
-  cam.x+=(p.x-W/2-cam.x)*0.12;
-  cam.y+=(p.y-H/2-cam.y)*0.12;
-  if(cam.shake>0){cam.shake*=0.9;if(cam.shake<0.1)cam.shake=0}
-  
-  // 武器
-  for(const w of p.weapons){
-    const d=WEAPONS[w.type];
-    if(d.update)d.update(p,enemies,w.lv,dt);
-    if(d.attack){w.cd-=dt;if(w.cd<=0){d.attack(p,enemies,w.lv);w.cd=Math.max(0.2,d.baseCd*Math.pow(0.92,w.lv-1))}}
-  }
-  
-  // 敌人
-  for(const e of enemies){
-    if(e.dead)continue;
-    e.hitFlash=Math.max(0,e.hitFlash-dt);
-    if(e.burning>0){e.burning-=dt;e.hp-=e.burnDmg*dt;if(Math.random()<0.25)spawnP(e.x+rnd(-4,4),e.y+rnd(-4,4),'#f80',1,1.5,0.25,3)}
-    if(e.slowTimer>0){e.slowTimer-=dt;if(e.slowTimer<=0)e.slow=0}
-    const spd=e.speed*(1-e.slow);
-    const a=ang(e,p);
-    e.x+=Math.cos(a)*spd*dt;e.y+=Math.sin(a)*spd*dt;
-    // 碰撞
-    if(p.invincible<=0&&dist(p,e)<e.size+14){
-      const dmg=Math.max(1,e.dmg*dt*1.5-p.armor*0.3);
-      p.hp-=dmg;
-      if(Math.random()<0.1){spawnDmg(p.x,p.y-20,Math.round(dmg),'#f44');playSound('hurt');addShake(3)}
-      if(p.hp<=0){G.gameOver();return}
-    }
-  }
-  // 清理远处敌人
-  for(let i=enemies.length-1;i>=0;i--){if(enemies[i].dead||dist(player,enemies[i])>1000)enemies.splice(i,1)}
-  
-  // 宝石
-  for(const g of gems){
-    g.life-=dt;g.a+=dt*3;
-    const d=dist(p,g);
-    if(d<p.magnet){const a=ang(g,p);g.x+=Math.cos(a)*350*dt;g.y+=Math.sin(a)*350*dt}
-    if(dist(p,g)<18){
-      g.collected=true;p.xp+=g.value;
-      playSound('pickup');
-      G.combos++;G.comboTimer=1;
-      while(p.xp>=p.xpToNext){
-        p.xp-=p.xpToNext;p.level++;
-        p.xpToNext=Math.floor(15*Math.pow(1.25,p.level-1));
-        p.maxHp+=8;p.hp=Math.min(p.hp+30,p.maxHp);
-        playSound('levelup');
-        showUpgrades();
-      }
-    }
-  }
-  for(let i=gems.length-1;i>=0;i--){if(gems[i].collected||gems[i].life<=0)gems.splice(i,1)}
-  
-  // 连击
-  if(G.comboTimer>0){G.comboTimer-=dt;if(G.comboTimer<=0)G.combos=0}
-  
-  // 粒子
-  for(const p of particles){p.x+=p.vx;p.y+=p.vy;p.life-=dt}
-  for(let i=particles.length-1;i>=0;i--){if(particles[i].life<=0)particles.splice(i,1)}
-  
-  // 伤害文字
-  for(const d of dmgTexts){d.y+=d.vy;d.life-=dt}
-  for(let i=dmgTexts.length-1;i>=0;i--){if(dmgTexts[i].life<=0)dmgTexts.splice(i,1)}
-  
-  // 特效
-  for(const f of G.swordFx)f.life-=dt;G.swordFx=G.swordFx.filter(f=>f.life>0);
-  for(const f of G.lightFx)f.life-=dt;G.lightFx=G.lightFx.filter(f=>f.life>0);
-  for(const f of G.fireFx)f.life-=dt;G.fireFx=G.fireFx.filter(f=>f.life>0);
-  for(const f of G.iceFx)f.life-=dt;G.iceFx=G.iceFx.filter(f=>f.life>0);
-  
-  spawnWave(dt);
-}
-
-// ==================== 渲染 ====================
-function drawGrid(){
-  const gs=80,sx=-(cam.x%gs),sy=-(cam.y%gs);
-  X.strokeStyle='rgba(255,255,255,0.025)';X.lineWidth=1;
-  for(let x=sx;x<W;x+=gs){X.beginPath();X.moveTo(x,0);X.lineTo(x,H);X.stroke()}
-  for(let y=sy;y<H;y+=gs){X.beginPath();X.moveTo(0,y);X.lineTo(W,y);X.stroke()}
-}
-
-function drawPlayer(){
-  const p=player,sx=p.x-cam.x,sy=p.y-cam.y;
-  // 拖尾
-  for(const t of p.trail){
-    const a=t.t/0.15;
-    X.globalAlpha=a*0.3;X.fillStyle='#0f8';
-    X.beginPath();X.arc(t.x-cam.x,t.y-cam.y,14*a,0,PI2);X.fill();
-  }
-  X.globalAlpha=1;
-  // 主体
-  X.fillStyle='#0f8';X.shadowColor='#0f8';X.shadowBlur=18;
-  X.beginPath();X.arc(sx,sy,15,0,PI2);X.fill();
-  X.shadowBlur=0;
-  // 眼睛
-  X.fillStyle='#fff';
-  X.fillRect(sx-5,sy-4,4,4);X.fillRect(sx+2,sy-4,4,4);
-  X.fillStyle='#111';
-  X.fillRect(sx-4,sy-3,2,2);X.fillRect(sx+3,sy-3,2,2);
-  // 无敌闪烁
-  if(p.invincible>0&&Math.floor(p.invincible*10)%2===0){
-    X.globalAlpha=0.4;X.fillStyle='#fff';X.beginPath();X.arc(sx,sy,18,0,PI2);X.fill();X.globalAlpha=1;
-  }
-  // 护身球
-  for(const w of p.weapons){
-    if(w.type==='orb'){
-      const cnt=2+Math.floor(w.lv/2),r=65+w.lv*10;
-      X.fillStyle='#0ff';X.shadowColor='#0ff';X.shadowBlur=12;
-      for(let i=0;i<cnt;i++){
-        const a=(p.orbAngle||0)+(PI2/cnt)*i;
-        X.beginPath();X.arc(p.x+Math.cos(a)*r-cam.x,p.y+Math.sin(a)*r-cam.y,7,0,PI2);X.fill();
-      }
-      X.shadowBlur=0;
-    }
-  }
-}
-
-function drawEnemy(e){
-  if(e.dead)return;
-  const sx=e.x-cam.x,sy=e.y-cam.y;
-  X.fillStyle=e.hitFlash>0?'#fff':e.color;
-  
-  switch(e.shape){
-    case'circle':
-      X.beginPath();X.arc(sx,sy,e.size,0,PI2);X.fill();break;
-    case'tri':
-      X.beginPath();X.moveTo(sx,sy-e.size);X.lineTo(sx+e.size,sy+e.size*0.6);X.lineTo(sx-e.size,sy+e.size*0.6);X.closePath();X.fill();break;
-    case'diamond':
-      X.beginPath();X.moveTo(sx,sy-e.size);X.lineTo(sx+e.size*0.7,sy);X.lineTo(sx,sy+e.size);X.lineTo(sx-e.size*0.7,sy);X.closePath();X.fill();break;
-    case'star':
-      X.beginPath();
-      for(let i=0;i<5;i++){const a1=-PI/2+PI2/5*i,a2=a1+PI2/10;X.lineTo(sx+Math.cos(a1)*e.size,sy+Math.sin(a1)*e.size);X.lineTo(sx+Math.cos(a2)*e.size*0.5,sy+Math.sin(a2)*e.size*0.5)}
-      X.closePath();X.fill();break;
-  }
-  
-  // 燃烧效果
-  if(e.burning>0){X.globalAlpha=0.5;X.fillStyle='#f80';X.beginPath();X.arc(sx,sy-e.size-5,5,0,PI2);X.fill();X.globalAlpha=1}
-  // 减速效果
-  if(e.slowTimer>0){X.globalAlpha=0.4;X.fillStyle='#8cf';X.beginPath();X.arc(sx,sy,e.size+3,0,PI2);X.fill();X.globalAlpha=1}
-  
-  // 血条
-  if(e.hp<e.maxHp){
-    const bw=e.size*2;
-    X.fillStyle='#300';X.fillRect(sx-bw/2,sy-e.size-8,bw,3);
-    X.fillStyle=e.type==='boss'?'#f00':'#f44';X.fillRect(sx-bw/2,sy-e.size-8,bw*(e.hp/e.maxHp),3);
-  }
-}
-
-function drawFx(){
-  // 剑气
-  for(const f of G.swordFx){
-    X.save();X.translate(f.x-cam.x,f.y-cam.y);X.rotate(f.a);
-    X.globalAlpha=f.life/f.max*0.6;X.fillStyle='#0f8';
-    X.beginPath();X.moveTo(0,0);X.arc(0,0,f.range,-0.45,0.45);X.closePath();X.fill();
-    X.globalAlpha=1;X.restore();
-  }
-  // 闪电
-  for(const l of G.lightFx){
-    X.strokeStyle='#ff0';X.lineWidth=3;X.shadowColor='#ff0';X.shadowBlur=20;
-    X.globalAlpha=l.life/0.25;
-    X.beginPath();X.moveTo(l.x-cam.x,l.y-cam.y-120);
-    X.lineTo(l.x-cam.x+rnd(-12,12),l.y-cam.y-60);
-    X.lineTo(l.x-cam.x+rnd(-12,12),l.y-cam.y);
-    X.stroke();X.shadowBlur=0;X.globalAlpha=1;
-  }
-  // 火焰
-  for(const f of G.fireFx){
-    X.globalAlpha=f.life/f.max*0.35;X.fillStyle='#f80';
-    X.beginPath();X.arc(f.x-cam.x,f.y-cam.y,f.range*(1-f.life/f.max*0.2),0,PI2);X.fill();X.globalAlpha=1;
-  }
-  // 冰冻
-  for(const f of G.iceFx){
-    X.globalAlpha=f.life/f.max*0.4;X.strokeStyle='#8cf';X.lineWidth=2;
-    X.beginPath();X.arc(f.x-cam.x,f.y-cam.y,f.range*(1-f.life/f.max*0.3),0,PI2);X.stroke();X.globalAlpha=1;
-  }
-}
-
-function drawGems(){
-  for(const g of gems){
-    const sx=g.x-cam.x,sy=g.y-cam.y;
-    X.fillStyle=g.color;X.shadowColor=g.color;X.shadowBlur=8;
-    X.beginPath();
-    X.moveTo(sx,sy-g.size);X.lineTo(sx+g.size*0.6,sy);
-    X.lineTo(sx,sy+g.size);X.lineTo(sx-g.size*0.6,sy);
-    X.closePath();X.fill();X.shadowBlur=0;
-  }
-}
-
-function drawParticles(){
-  for(const p of particles){
-    X.globalAlpha=p.life/p.maxLife;X.fillStyle=p.color;
-    X.fillRect(p.x-cam.x-p.size/2,p.y-cam.y-p.size/2,p.size,p.size);
-  }
-  X.globalAlpha=1;
-}
-
-function drawDmgTexts(){
-  X.textAlign='center';X.font='bold 15px sans-serif';
-  for(const d of dmgTexts){
-    X.globalAlpha=Math.max(0,d.life/0.7);X.fillStyle=d.color;
-    X.strokeStyle='rgba(0,0,0,0.6)';X.lineWidth=3;
-    X.strokeText(d.text,d.x-cam.x,d.y-cam.y);
-    X.fillText(d.text,d.x-cam.x,d.y-cam.y);
-  }
-  X.globalAlpha=1;
-}
-
-function drawHUD(){
-  const p=player;
-  // XP条
-  const xpW=W,xpH=5;
-  X.fillStyle='#222';X.fillRect(0,0,xpW,xpH);
-  X.fillStyle='#0f8';X.fillRect(0,0,xpW*(p.xp/p.xpToNext),xpH);
-  
-  // HUD
-  X.textAlign='left';X.font='14px sans-serif';
-  const hx=12,hy=22;
-  
-  // HP条
-  X.fillStyle='#333';X.fillRect(hx,hy,130,10);
-  X.fillStyle=p.hp/p.maxHp>0.3?'#f44':'#f00';X.fillRect(hx,hy,130*(p.hp/p.maxHp),10);
-  X.strokeStyle='#555';X.strokeRect(hx,hy,130,10);
-  X.fillStyle='#fff';X.font='10px sans-serif';X.fillText(`${Math.ceil(p.hp)}/${p.maxHp}`,hx+4,hy+9);
-  
-  // 信息
-  X.font='14px sans-serif';X.fillStyle='#fff';
-  X.fillText(`⏱ ${fmtTime(G.time)}  💀 ${G.kills}  ⭐ Lv.${p.level}`,hx,hy+26);
-  
-  // 连击
-  if(G.combos>=3){
-    X.fillStyle='#ff0';X.font='bold 18px sans-serif';
-    X.fillText(`${G.combos} COMBO!`,hx,hy+48);
-  }
-  
-  // 武器信息
-  X.font='12px sans-serif';X.fillStyle='#aaa';
-  const wi=p.weapons.map(w=>`${WEAPONS[w.type].icon}${WEAPONS[w.type].name}Lv${w.lv}`).join('  ');
-  X.fillText(wi,hx,hy+65);
-  
-  // 波次
-  X.textAlign='right';X.fillStyle='#888';X.font='12px sans-serif';
-  X.fillText(`Wave ${G.wave}`,W-12,22);
-  
-  // Boss警告
-  if(G.wave%5===0&&G.waveTimer<3){
-    X.textAlign='center';X.fillStyle='#f44';X.font='bold 28px sans-serif';
-    X.globalAlpha=0.5+Math.sin(G.time*8)*0.5;
-    X.fillText('⚠ BOSS来袭！',W/2,H/2-100);
-    X.globalAlpha=1;
-  }
-  
-  X.textAlign='left';
-}
-
-function drawUpgradePanel(){
-  if(G.state!=='upgrade')return;
-  // 半透明遮罩
-  X.fillStyle='rgba(0,0,0,0.7)';X.fillRect(0,0,W,H);
-  
-  X.textAlign='center';X.fillStyle='#ff0';X.font='bold 26px sans-serif';
-  X.fillText('⬆ 升级！选择强化',W/2,H/2-120);
-  
-  const bw=280,bh=60,startY=H/2-60;
-  for(let i=0;i<G.upgradeOpts.length;i++){
-    const opt=G.upgradeOpts[i];
-    const y=startY+i*75;
-    // 按钮背景
-    X.fillStyle='rgba(0,0,0,0.85)';
-    X.strokeStyle='#0f8';X.lineWidth=2;
-    X.beginPath();X.roundRect(W/2-bw/2,y,bw,bh,8);X.fill();X.stroke();
-    
-    X.fillStyle='#0f8';X.font='bold 16px sans-serif';X.textAlign='center';
-    X.fillText(opt.name,W/2,y+24);
-    X.fillStyle='#aaa';X.font='13px sans-serif';
-    X.fillText(opt.desc,W/2,y+44);
-  }
-  
-  // 提示
-  X.fillStyle='#666';X.font='12px sans-serif';
-  X.fillText('点击选择（数字键1-3）',W/2,startY+G.upgradeOpts.length*75+20);
-  X.textAlign='left';
-}
-
-function drawGameOver(){
-  if(G.state!=='gameover')return;
-  X.fillStyle='rgba(0,0,0,0.75)';X.fillRect(0,0,W,H);
-  X.textAlign='center';
-  X.fillStyle='#f44';X.font='bold 52px sans-serif';
-  X.fillText('💀 游戏结束',W/2,H/2-80);
-  X.fillStyle='#ccc';X.font='18px sans-serif';
-  X.fillText(`存活：${fmtTime(G.time)}   击杀：${G.kills}   等级：Lv.${player.level}`,W/2,H/2-20);
-  X.fillStyle='#0f8';X.font='bold 22px sans-serif';
-  X.fillText('点击重新开始',W/2,H/2+40);
-  X.textAlign='left';
-}
-
-function drawMenu(){
-  X.textAlign='center';
-  // 标题
-  X.fillStyle='#0f8';X.shadowColor='#0f8';X.shadowBlur=30;
-  X.font='bold 56px sans-serif';
-  X.fillText('⚔ 割草英雄',W/2,H/2-60);
-  X.shadowBlur=0;
-  
-  X.fillStyle='#888';X.font='14px sans-serif';
-  X.fillText('WASD/方向键移动 · 自动攻击 · 升级强化',W/2,H/2-10);
-  
-  // 闪烁提示
-  X.globalAlpha=0.5+Math.sin(Date.now()/500)*0.5;
-  X.fillStyle='#0f8';X.font='bold 24px sans-serif';
-  X.fillText('点击开始',W/2,H/2+50);
-  X.globalAlpha=1;
-  
-  X.fillStyle='#555';X.font='12px sans-serif';
-  X.fillText('v0.2 · 割草Roguelike',W/2,H/2+100);
-  X.textAlign='left';
-}
-
-function fmtTime(s){return`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`}
-
-// ==================== 点击处理 ====================
-C.addEventListener('click',e=>{
-  initAudio();
-  if(G.state==='menu'){G.start();return}
-  if(G.state==='gameover'){G.start();return}
-  if(G.state==='upgrade'){
-    const bw=280,bh=60,startY=H/2-60;
-    const mx=e.clientX,my=e.clientY;
-    for(let i=0;i<G.upgradeOpts.length;i++){
-      const y=startY+i*75;
-      if(mx>W/2-bw/2&&mx<W/2+bw/2&&my>y&&my<y+bh){
-        G.upgradeOpts[i].apply();G.state='play';return;
-      }
-    }
-  }
-});
-
-// 键盘选择升级
-addEventListener('keydown',e=>{
-  if(G.state==='upgrade'){
-    const n=parseInt(e.key);
-    if(n>=1&&n<=3&&G.upgradeOpts[n-1]){
-      G.upgradeOpts[n-1].apply();G.state='play';
-    }
-  }
-});
-
-// ==================== 主循环 ====================
-let last=performance.now();
-function loop(now){
-  const dt=Math.min(0.05,(now-last)/1000);last=now;
-  
-  update(dt);
-  
-  // 渲染
-  X.fillStyle='#0a0a1a';X.fillRect(0,0,W,H);
-  
-  if(G.state==='menu'){drawMenu()}
-  else{
-    // 相机震动
-    X.save();
-    if(cam.shake>0.5)X.translate(rnd(-cam.shake,cam.shake),rnd(-cam.shake,cam.shake));
-    
-    drawGrid();
-    drawGems();
-    for(const e of enemies)drawEnemy(e);
-    drawPlayer();
-    drawFx();
-    drawParticles();
-    drawDmgTexts();
-    
-    X.restore();
-    
-    drawHUD();
-    drawUpgradePanel();
-    drawGameOver();
-  }
-  
-  requestAnimationFrame(loop);
-}
-requestAnimationFrame(loop);
 </script>
 </body>
 </html>
