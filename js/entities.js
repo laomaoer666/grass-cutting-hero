@@ -250,6 +250,11 @@ function spawnXPGem(x, y, value) {
    7. updateEnemies
    ============================================================ */
 function updateEnemies(dt) {
+  // DEBUG: 强制移动第一个敌人
+  if (enemies.length > 0 && !enemies[0].dead) {
+    enemies[0].x += 50 * dt; // 每秒50像素向右
+  }
+
   for (var i = 0; i < enemies.length; i++) {
     var e = enemies[i];
     if (e.dead) continue;
