@@ -82,6 +82,33 @@ C.addEventListener('touchend',e=>{
 addEventListener('mousedown',initAudio);
 addEventListener('keydown',initAudio);
 
+// ==================== BOSS类型注册表 ====================
+// 每个BOSS有独立的属性、攻击模式、视觉风格
+// 后续细化时在这里加新类型即可
+const BOSS_TYPES={
+  // 默认BOSS（当前通用）
+  default:{name:'暴君',color:'#f33',hp:800,dmg:45,size:32,speed:22,
+    attacks:['fan','charge'],
+    desc:'扇形弹幕+冲锋'},
+  // 以下是预留模板，后续填充
+  // tank:{name:'铁壁将军',color:'#f80',hp:1500,dmg:30,size:40,speed:15,
+  //   attacks:['shield','summon'],
+  //   desc:'召唤小怪+护盾'},
+  // assassin:{name:'暗影刺客',color:'#a0f',hp:500,dmg:60,size:25,speed:60,
+  //   attacks:['teleport','backstab'],
+  //   desc:'瞬移背刺'},
+  // swarm:{name:'虫巢母后',color:'#6a3',hp:1200,dmg:20,size:35,speed:18,
+  //   attacks:['spawn','poison'],
+  //   desc:'持续产卵+毒雾'},
+};
+// 根据波次选择BOSS类型
+function getBossType(wave){
+  const types=Object.keys(BOSS_TYPES);
+  // 第一个BOSS always default，后续循环
+  const idx=Math.floor((wave/5-1))%types.length;
+  return BOSS_TYPES[types[idx]]||BOSS_TYPES.default;
+}
+
 // ==================== BOSS弹幕 ====================
 const bossBullets=[];
 const traps=[];
@@ -513,7 +540,16 @@ function spawnWave(dt){
     if(G.wave%5===0){
       playSound('boss');
       const a=Math.random()*PI2,d=rnd(350,450);
-      spawnEnemy('boss',player.x+Math.cos(a)*d,player.y+Math.sin(a)*d,hpMult);
+      const bt=getBossType(G.wave);
+      const bx=player.x+Math.cos(a)*d,by=player.y+Math.sin(a)*d;
+      const e=spawnEnemy('boss',bx,by,hpMult);
+      // 覆盖BOSS专属属性
+      const boss=enemies[enemies.length-1];
+      boss.bossName=bt.name;boss.color=bt.color;
+      boss.hp=bt.hp*hpMult;boss.maxHp=bt.hp*hpMult;
+      boss.dmg=bt.dmg*(1+(hpMult-1)*0.3);
+      boss.size=bt.size;boss.speed=bt.speed;
+      boss.attacks=bt.attacks;
     }
   }
   // 陷阱生成（第二个BOSS死后）
@@ -569,45 +605,54 @@ function update(dt){
     if(e.slowTimer>0){e.slowTimer-=dt;if(e.slowTimer<=0)e.slow=0}
     const spd=e.speed*(1-e.slow);
     const a=ang(e,p);
-    // BOSS特殊AI
+    // BOSS特殊AI（数据驱动，根据attacks数组决定攻击模式）
     if(e.type==='boss'&&!e.dead){
-      // 弹幕攻击
-      e.bossAtkCd-=dt;
-      if(e.bossAtkCd<=0){
-        e.bossPhase=(e.bossPhase||0)+1;
-        // 扇形弹幕
-        const baseA=ang(e,p);
-        const bulletCount=5+Math.floor(G.wave/5)*2;
-        const spread=0.8;
-        for(let i=0;i<bulletCount;i++){
-          const ba=baseA-spread/2+spread/(bulletCount-1)*i;
-          spawnBossBullet(e.x,e.y,ba,180,e.dmg*0.5,'#f44',6);
+      const atks=e.attacks||['fan','charge'];
+      // 扇形弹幕
+      if(atks.includes('fan')){
+        e.bossAtkCd-=dt;
+        if(e.bossAtkCd<=0){
+          e.bossPhase=(e.bossPhase||0)+1;
+          const baseA=ang(e,p);
+          const bulletCount=5+Math.floor(G.wave/5)*2;
+          const spread=0.8;
+          for(let i=0;i<bulletCount;i++){
+            const ba=baseA-spread/2+spread/(bulletCount-1)*i;
+            spawnBossBullet(e.x,e.y,ba,180,e.dmg*0.5,e.color,6);
+          }
+          e.bossAtkCd=Math.max(0.8,1.5-G.wave*0.05);
+          addShake(2);
         }
-        e.bossAtkCd=Math.max(0.8,1.5-G.wave*0.05);
-        addShake(2);
       }
       // 冲锋攻击
-      e.bossChargeCd-=dt;
-      if(e.bossChargeCd<=0&&!e.bossCharging){
-        e.bossCharging=true;
-        e.bossChargeDir=ang(e,p);
-        e.bossChargeCd=Math.max(4,8-G.wave*0.2);
-        playSound('boss');
-      }
-      if(e.bossCharging){
-        const chargeSpd=400;
-        e.x+=Math.cos(e.bossChargeDir)*chargeSpd*dt;
-        e.y+=Math.sin(e.bossChargeDir)*chargeSpd*dt;
-        // 冲锋持续0.6秒
-        if(!e._chargeTime)e._chargeTime=0;
-        e._chargeTime+=dt;
-        if(e._chargeTime>0.6){e.bossCharging=false;e._chargeTime=0;addShake(5)}
-        // 冲锋碰撞伤害更高
-        if(p.invincible<=0&&dist(p,e)<e.size+20){
-          p.hp-=e.dmg*dt*3;
-          spawnP(p.x,p.y,'#f44',4,3,0.3,3);
+      if(atks.includes('charge')){
+        e.bossChargeCd-=dt;
+        if(e.bossChargeCd<=0&&!e.bossCharging){
+          e.bossCharging=true;
+          e.bossChargeDir=ang(e,p);
+          e.bossChargeCd=Math.max(4,8-G.wave*0.2);
+          playSound('boss');
         }
-      }else{
+        if(e.bossCharging){
+          const chargeSpd=400;
+          e.x+=Math.cos(e.bossChargeDir)*chargeSpd*dt;
+          e.y+=Math.sin(e.bossChargeDir)*chargeSpd*dt;
+          if(!e._chargeTime)e._chargeTime=0;
+          e._chargeTime+=dt;
+          if(e._chargeTime>0.6){e.bossCharging=false;e._chargeTime=0;addShake(5)}
+          if(p.invincible<=0&&dist(p,e)<e.size+20){
+            p.hp-=e.dmg*dt*3;
+            spawnP(p.x,p.y,e.color,4,3,0.3,3);
+          }
+        }
+      }
+      // 预留：护盾、召唤、瞬移、毒雾等
+      // if(atks.includes('shield')){...}
+      // if(atks.includes('summon')){...}
+      // if(atks.includes('teleport')){...}
+      // if(atks.includes('poison')){...}
+      if(!e.bossCharging){
+        const a=ang(e,p);const spd=e.speed*(1-e.slow);
         e.x+=Math.cos(a)*spd*dt;e.y+=Math.sin(a)*spd*dt;
       }
     }else{
@@ -1008,7 +1053,7 @@ function drawBossHP(){
   X.fillStyle='#f22';X.fillRect(bx,by,bw*(boss.hp/boss.maxHp),bh);
   // 文字
   X.fillStyle='#fff';X.font='bold 11px sans-serif';X.textAlign='center';
-  X.fillText(`👹 BOSS  ${Math.ceil(boss.hp)}/${boss.maxHp}`,W/2,by+bh-2);
+  X.fillText(`👹 ${boss.bossName||'BOSS'}  ${Math.ceil(boss.hp)}/${boss.maxHp}`,W/2,by+bh-2);
   X.textAlign='left';
 }
 
@@ -1157,7 +1202,7 @@ function drawMenu(){
   X.globalAlpha=1;
   
   X.fillStyle='#555';X.font='12px sans-serif';
-  X.fillText('v0.8 · 真男人不回头',W/2,H/2+100);
+  X.fillText('v0.9 · 真男人不回头',W/2,H/2+100);
   X.textAlign='left';
 }
 
