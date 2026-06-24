@@ -82,6 +82,12 @@ C.addEventListener('touchend',e=>{
 addEventListener('mousedown',initAudio);
 addEventListener('keydown',initAudio);
 
+// ==================== BOSS弹幕 ====================
+const bossBullets=[];
+function spawnBossBullet(x,y,angle,speed,dmg,color,size){
+  bossBullets.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,dmg,color:color||'#f44',size:size||6,life:4});
+}
+
 // ==================== 相机 ====================
 const cam={x:0,y:0,shake:0};
 function addShake(amount){cam.shake=Math.min(cam.shake+amount,15)}
@@ -127,7 +133,8 @@ function spawnEnemy(type,x,y,hpMult=1){
   const t=ENEMY_TYPES[type];
   const e={type,x,y,...t,hp:t.hp*hpMult,maxHp:t.hp*hpMult,dmg:t.dmg*(1+(hpMult-1)*0.3),
     hitFlash:0,burning:0,burnDmg:0,slow:0,slowTimer:0,dead:false,
-    acidOnDeath:t.acidOnDeath||false,children:t.children||0};
+    acidOnDeath:t.acidOnDeath||false,children:t.children||0,
+    bossAtkCd:type==='boss'?1.5:0,bossPhase:0,bossChargeCd:type==='boss'?8:0,bossCharging:false,bossChargeDir:0};
   enemies.push(e);
 }
 
@@ -291,7 +298,7 @@ const G={
     player.xp=0;player.level=1;player.xpToNext=15;
     player.speed=160*ch.speedMul;player.magnet=90;player.armor=0;
     player.weapons=[{type:'sword',lv:1,cd:0}];player.invincible=0;
-    enemies.length=0;gems.length=0;particles.length=0;dmgTexts.length=0;
+    enemies.length=0;gems.length=0;particles.length=0;dmgTexts.length=0;bossBullets.length=0;
     this.swordFx=[];this.lightFx=[];this.fireFx=[];this.iceFx=[];
     this.time=0;this.kills=0;this.spawnTimer=0;this.wave=1;this.waveTimer=0;
     this.combos=0;this.comboTimer=0;
@@ -333,7 +340,15 @@ function spawnWave(dt){
   
   // 波次升级更快：18s一波
   G.waveTimer+=dt;
-  if(G.waveTimer>18){G.waveTimer=0;G.wave++;if(G.wave%5===0)playSound('boss')}
+  if(G.waveTimer>18){
+    G.waveTimer=0;G.wave++;
+    if(G.wave%5===0){
+      playSound('boss');
+      // 必定刷新BOSS
+      const a=Math.random()*PI2,d=rnd(350,450);
+      spawnEnemy('boss',player.x+Math.cos(a)*d,player.y+Math.sin(a)*d,hpMult);
+    }
+  }
 }
 
 // ==================== 更新 ====================
@@ -376,7 +391,50 @@ function update(dt){
     if(e.slowTimer>0){e.slowTimer-=dt;if(e.slowTimer<=0)e.slow=0}
     const spd=e.speed*(1-e.slow);
     const a=ang(e,p);
-    e.x+=Math.cos(a)*spd*dt;e.y+=Math.sin(a)*spd*dt;
+    // BOSS特殊AI
+    if(e.type==='boss'&&!e.dead){
+      // 弹幕攻击
+      e.bossAtkCd-=dt;
+      if(e.bossAtkCd<=0){
+        e.bossPhase=(e.bossPhase||0)+1;
+        // 扇形弹幕
+        const baseA=ang(e,p);
+        const bulletCount=5+Math.floor(G.wave/5)*2;
+        const spread=0.8;
+        for(let i=0;i<bulletCount;i++){
+          const ba=baseA-spread/2+spread/(bulletCount-1)*i;
+          spawnBossBullet(e.x,e.y,ba,180,e.dmg*0.5,'#f44',6);
+        }
+        e.bossAtkCd=Math.max(0.8,1.5-G.wave*0.05);
+        addShake(2);
+      }
+      // 冲锋攻击
+      e.bossChargeCd-=dt;
+      if(e.bossChargeCd<=0&&!e.bossCharging){
+        e.bossCharging=true;
+        e.bossChargeDir=ang(e,p);
+        e.bossChargeCd=Math.max(4,8-G.wave*0.2);
+        playSound('boss');
+      }
+      if(e.bossCharging){
+        const chargeSpd=400;
+        e.x+=Math.cos(e.bossChargeDir)*chargeSpd*dt;
+        e.y+=Math.sin(e.bossChargeDir)*chargeSpd*dt;
+        // 冲锋持续0.6秒
+        if(!e._chargeTime)e._chargeTime=0;
+        e._chargeTime+=dt;
+        if(e._chargeTime>0.6){e.bossCharging=false;e._chargeTime=0;addShake(5)}
+        // 冲锋碰撞伤害更高
+        if(p.invincible<=0&&dist(p,e)<e.size+20){
+          p.hp-=e.dmg*dt*3;
+          spawnP(p.x,p.y,'#f44',4,3,0.3,3);
+        }
+      }else{
+        e.x+=Math.cos(a)*spd*dt;e.y+=Math.sin(a)*spd*dt;
+      }
+    }else{
+      e.x+=Math.cos(a)*spd*dt;e.y+=Math.sin(a)*spd*dt;
+    }
     // 碰撞
     if(p.invincible<=0&&dist(p,e)<e.size+14){
       const dmg=Math.max(1,e.dmg*dt*1.5-p.armor*0.3);
@@ -395,6 +453,20 @@ function update(dt){
     if(t.life<=0){deathTraces.splice(i,1);continue}
     if(dist(p,t)<t.radius){
       p.hp-=t.dps*dt;
+      if(p.hp<=0){G.gameOver();return}
+    }
+  }
+  
+  // BOSS子弹更新
+  for(let i=bossBullets.length-1;i>=0;i--){
+    const b=bossBullets[i];
+    b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;
+    if(b.life<=0||dist(p,b)>800){bossBullets.splice(i,1);continue}
+    if(p.invincible<=0&&dist(p,b)<b.size+14){
+      p.hp-=b.dmg;
+      spawnDmg(p.x,p.y-20,Math.round(b.dmg),'#f44');
+      playSound('hurt');addShake(3);
+      bossBullets.splice(i,1);
       if(p.hp<=0){G.gameOver();return}
     }
   }
@@ -556,6 +628,34 @@ function drawDeathTraces(){
   }
 }
 
+function drawBossBullets(){
+  for(const b of bossBullets){
+    const sx=b.x-cam.x,sy=b.y-cam.y;
+    X.fillStyle=b.color;X.shadowColor=b.color;X.shadowBlur=10;
+    X.beginPath();X.arc(sx,sy,b.size,0,PI2);X.fill();
+    // 内核亮色
+    X.fillStyle='#ff8';X.beginPath();X.arc(sx,sy,b.size*0.4,0,PI2);X.fill();
+    X.shadowBlur=0;
+  }
+}
+
+function drawBossHP(){
+  // 找活着的BOSS
+  const boss=enemies.find(e=>e.type==='boss'&&!e.dead);
+  if(!boss)return;
+  const bw=W*0.6,bh=12,bx=(W-bw)/2,by=30;
+  // 背景
+  X.fillStyle='rgba(0,0,0,0.6)';X.fillRect(bx-4,by-4,bw+8,bh+8);
+  X.strokeStyle='#f44';X.lineWidth=1;X.strokeRect(bx-4,by-4,bw+8,bh+8);
+  // 血条
+  X.fillStyle='#400';X.fillRect(bx,by,bw,bh);
+  X.fillStyle='#f22';X.fillRect(bx,by,bw*(boss.hp/boss.maxHp),bh);
+  // 文字
+  X.fillStyle='#fff';X.font='bold 11px sans-serif';X.textAlign='center';
+  X.fillText(`👹 BOSS  ${Math.ceil(boss.hp)}/${boss.maxHp}`,W/2,by+bh-2);
+  X.textAlign='left';
+}
+
 function drawGems(){
   for(const g of gems){
     const sx=g.x-cam.x,sy=g.y-cam.y;
@@ -693,7 +793,7 @@ function drawMenu(){
   X.globalAlpha=1;
   
   X.fillStyle='#555';X.font='12px sans-serif';
-  X.fillText('v0.3 · 真男人不回头',W/2,H/2+100);
+  X.fillText('v0.4 · 真男人不回头',W/2,H/2+100);
   X.textAlign='left';
 }
 
@@ -804,12 +904,14 @@ function loop(now){
     for(const e of enemies)drawEnemy(e);
     drawPlayer();
     drawFx();
+    drawBossBullets();
     drawParticles();
     drawDmgTexts();
     
     X.restore();
     
     drawHUD();
+    drawBossHP();
     drawUpgradePanel();
     drawGameOver();
   }
