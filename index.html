@@ -572,23 +572,41 @@ function drawPlayer(){
     X.beginPath();X.arc(t.x-cam.x,t.y-cam.y,14*a,0,PI2);X.fill();
   }
   X.globalAlpha=1;
-  // 主体
-  X.fillStyle=col;X.shadowColor=col;X.shadowBlur=18;
-  X.beginPath();X.arc(sx,sy,15,0,PI2);X.fill();
+  
+  // 身体（圆角矩形）
+  X.fillStyle=col;X.shadowColor=col;X.shadowBlur=15;
+  X.beginPath();
+  X.roundRect(sx-8,sy-4,16,18,4);X.fill();
   X.shadowBlur=0;
-  // 眼睛
+  // 头
+  X.fillStyle=col;X.shadowColor=col;X.shadowBlur=12;
+  X.beginPath();X.arc(sx,sy-12,10,0,PI2);X.fill();
+  X.shadowBlur=0;
+  // 眼睛（会根据移动方向看向一侧）
+  const lookX=mDir.x||0,lookY=mDir.y||0;
   X.fillStyle='#fff';
-  X.fillRect(sx-5,sy-4,4,4);X.fillRect(sx+2,sy-4,4,4);
+  X.beginPath();X.arc(sx-3+lookX*2,sy-13+lookY*1.5,3.5,0,PI2);X.fill();
+  X.beginPath();X.arc(sx+4+lookX*2,sy-13+lookY*1.5,3.5,0,PI2);X.fill();
   X.fillStyle='#111';
-  X.fillRect(sx-4,sy-3,2,2);X.fillRect(sx+3,sy-3,2,2);
+  X.beginPath();X.arc(sx-3+lookX*3,sy-13+lookY*2,1.8,0,PI2);X.fill();
+  X.beginPath();X.arc(sx+4+lookX*3,sy-13+lookY*2,1.8,0,PI2);X.fill();
+  // 脚（走路动画）
+  const walkT=G.time*8;
+  const walking=Math.abs(mDir.x)>0.1||Math.abs(mDir.y)>0.1||Math.abs(p.vx||0)>0.1;
+  const legOff=walking?Math.sin(walkT)*3:0;
+  X.fillStyle=col;
+  X.fillRect(sx-6,sy+14,5,4+legOff);
+  X.fillRect(sx+1,sy+14,5,4-legOff);
+  
   // 无敌闪烁
   if(p.invincible>0&&Math.floor(p.invincible*10)%2===0){
-    X.globalAlpha=0.4;X.fillStyle='#fff';X.beginPath();X.arc(sx,sy,18,0,PI2);X.fill();X.globalAlpha=1;
+    X.globalAlpha=0.4;X.fillStyle='#fff';
+    X.beginPath();X.arc(sx,sy,22,0,PI2);X.fill();X.globalAlpha=1;
   }
   // 护身球
   for(const w of p.weapons){
     if(w.type==='orb'){
-      const cnt=2+Math.floor(w.lv/2),r=65+w.lv*10;
+      const cnt=2+Math.floor(w.lv/2),r=70+w.lv*8;
       X.fillStyle='#0ff';X.shadowColor='#0ff';X.shadowBlur=12;
       for(let i=0;i<cnt;i++){
         const a=(p.orbAngle||0)+(PI2/cnt)*i;
@@ -602,31 +620,117 @@ function drawPlayer(){
 function drawEnemy(e){
   if(e.dead)return;
   const sx=e.x-cam.x,sy=e.y-cam.y;
-  X.fillStyle=e.hitFlash>0?'#fff':e.color;
+  const flash=e.hitFlash>0;
+  X.fillStyle=flash?'#fff':e.color;
+  X.shadowColor=e.color;X.shadowBlur=8;
   
-  switch(e.shape){
-    case'circle':
-      X.beginPath();X.arc(sx,sy,e.size,0,PI2);X.fill();break;
-    case'tri':
-      X.beginPath();X.moveTo(sx,sy-e.size);X.lineTo(sx+e.size,sy+e.size*0.6);X.lineTo(sx-e.size,sy+e.size*0.6);X.closePath();X.fill();break;
-    case'diamond':
-      X.beginPath();X.moveTo(sx,sy-e.size);X.lineTo(sx+e.size*0.7,sy);X.lineTo(sx,sy+e.size);X.lineTo(sx-e.size*0.7,sy);X.closePath();X.fill();break;
-    case'star':
+  switch(e.type){
+    case 'slime':
+      // 史莱姆：椭圆身体+大眼睛
+      X.beginPath();X.ellipse(sx,sy+2,e.size,e.size*0.75,0,0,PI2);X.fill();
+      X.shadowBlur=0;
+      if(!flash){X.fillStyle='#fff';X.beginPath();X.arc(sx-4,sy-2,3.5,0,PI2);X.fill();X.beginPath();X.arc(sx+4,sy-2,3.5,0,PI2);X.fill();X.fillStyle='#222';X.beginPath();X.arc(sx-3,sy-1,2,0,PI2);X.fill();X.beginPath();X.arc(sx+5,sy-1,2,0,PI2);X.fill()}
+      break;
+    case 'bat':
+      // 蝙蝠：翅膀上下扇动
+      const wingFlap=Math.sin(G.time*12+e.x)*0.4;
       X.beginPath();
-      for(let i=0;i<5;i++){const a1=-PI/2+PI2/5*i,a2=a1+PI2/10;X.lineTo(sx+Math.cos(a1)*e.size,sy+Math.sin(a1)*e.size);X.lineTo(sx+Math.cos(a2)*e.size*0.5,sy+Math.sin(a2)*e.size*0.5)}
-      X.closePath();X.fill();break;
+      X.moveTo(sx,sy);
+      X.quadraticCurveTo(sx-e.size*1.8,sy-e.size*(1+wingFlap),sx-e.size*0.8,sy+e.size*0.3);
+      X.quadraticCurveTo(sx-e.size*0.3,sy-e.size*0.2,sx,sy);
+      X.fill();
+      X.beginPath();
+      X.moveTo(sx,sy);
+      X.quadraticCurveTo(sx+e.size*1.8,sy-e.size*(1+wingFlap),sx+e.size*0.8,sy+e.size*0.3);
+      X.quadraticCurveTo(sx+e.size*0.3,sy-e.size*0.2,sx,sy);
+      X.fill();
+      X.shadowBlur=0;
+      if(!flash){X.fillStyle='#f44';X.beginPath();X.arc(sx-3,sy-1,2,0,PI2);X.fill();X.beginPath();X.arc(sx+3,sy-1,2,0,PI2);X.fill()}
+      break;
+    case 'skeleton':
+      // 骷髅：头+肋骨
+      X.beginPath();X.arc(sx,sy-4,e.size*0.7,0,PI2);X.fill();
+      X.shadowBlur=0;
+      if(!flash){X.fillStyle='#111';X.fillRect(sx-4,sy-6,3,4);X.fillRect(sx+2,sy-6,3,4);X.fillRect(sx-2,sy-1,4,2)}
+      X.fillStyle=flash?'#fff':e.color;
+      for(let i=0;i<3;i++){X.fillRect(sx-6,sy+4+i*4,12,2)}
+      break;
+    case 'ogre':
+      // 食人魔：大块头+角
+      X.beginPath();X.arc(sx,sy,e.size,0,PI2);X.fill();
+      X.shadowBlur=0;
+      // 角
+      if(!flash){X.fillStyle='#a63';X.beginPath();X.moveTo(sx-8,sy-e.size+2);X.lineTo(sx-14,sy-e.size-10);X.lineTo(sx-3,sy-e.size+2);X.fill();X.beginPath();X.moveTo(sx+8,sy-e.size+2);X.lineTo(sx+14,sy-e.size-10);X.lineTo(sx+3,sy-e.size+2);X.fill()}
+      if(!flash){X.fillStyle='#f44';X.beginPath();X.arc(sx-5,sy-3,3,0,PI2);X.fill();X.beginPath();X.arc(sx+5,sy-3,3,0,PI2);X.fill()}
+      break;
+    case 'ghost':
+      // 幽灵：半透明+飘动尾巴
+      X.globalAlpha=0.6;
+      X.beginPath();X.arc(sx,sy-3,e.size*0.8,PI,0);
+      X.lineTo(sx+e.size*0.8,sy+e.size*0.6);
+      // 波浪底部
+      for(let i=3;i>=-3;i--){X.quadraticCurveTo(sx+i*e.size*0.27,sy+e.size*(0.6+(i%2)*0.3),sx+(i-1)*e.size*0.27,sy+e.size*0.6)}
+      X.closePath();X.fill();
+      X.globalAlpha=1;X.shadowBlur=0;
+      if(!flash){X.fillStyle='#fff';X.beginPath();X.arc(sx-3,sy-4,2.5,0,PI2);X.fill();X.beginPath();X.arc(sx+3,sy-4,2.5,0,PI2);X.fill();X.fillStyle='#228';X.beginPath();X.arc(sx-3,sy-3,1.5,0,PI2);X.fill();X.beginPath();X.arc(sx+3,sy-3,1.5,0,PI2);X.fill()}
+      break;
+    case 'worm':
+      // 蠕虫：分节身体
+      for(let i=0;i<4;i++){
+        const off=Math.sin(G.time*4+i*0.8)*3;
+        X.beginPath();X.arc(sx+off,sy-e.size+i*e.size*0.5,e.size*0.6*(1-i*0.1),0,PI2);X.fill();
+      }
+      X.shadowBlur=0;
+      if(!flash){X.fillStyle='#fff';X.beginPath();X.arc(sx-2,sy-e.size,2,0,PI2);X.fill();X.beginPath();X.arc(sx+2,sy-e.size,2,0,PI2);X.fill()}
+      break;
+    case 'acid':
+      // 酸液怪：冒泡绿色黏液
+      X.beginPath();X.ellipse(sx,sy+1,e.size*1.1,e.size*0.8,0,0,PI2);X.fill();
+      X.shadowBlur=0;
+      // 气泡
+      if(!flash){const bt=G.time*3;X.fillStyle='rgba(200,255,0,0.6)';for(let i=0;i<3;i++){const bx=sx+Math.sin(bt+i*2)*6,by=sy-Math.abs(Math.sin(bt*1.5+i))*8;X.beginPath();X.arc(bx,by,2+i%2,0,PI2);X.fill()}}
+      break;
+    case 'tank':
+      // 肉盾：方块身体+头盔
+      X.fillRect(sx-e.size,sy-e.size,e.size*2,e.size*2);
+      X.shadowBlur=0;
+      // 头盔线
+      if(!flash){X.strokeStyle='#654';X.lineWidth=2;X.beginPath();X.moveTo(sx-e.size,sy-e.size*0.3);X.lineTo(sx+e.size,sy-e.size*0.3);X.stroke();X.fillStyle='#432';X.fillRect(sx-e.size*0.6,sy-e.size*0.2,e.size*1.2,e.size*0.4)}
+      break;
+    case 'splitter':
+      // 分裂怪：裂纹球
+      X.beginPath();X.arc(sx,sy,e.size,0,PI2);X.fill();
+      X.shadowBlur=0;
+      if(!flash){X.strokeStyle='rgba(255,255,255,0.5)';X.lineWidth=1.5;X.beginPath();X.moveTo(sx-e.size*0.5,sy-e.size);X.lineTo(sx+e.size*0.2,sy);X.lineTo(sx-e.size*0.3,sy+e.size);X.stroke();X.beginPath();X.moveTo(sx+e.size*0.6,sy-e.size*0.8);X.lineTo(sx,sy+e.size*0.3);X.stroke()}
+      break;
+    case 'boss':
+      // BOSS：大星形+发光环+怒眼
+      X.beginPath();
+      for(let i=0;i<6;i++){const a1=-PI/2+PI2/6*i,a2=a1+PI2/12;X.lineTo(sx+Math.cos(a1)*e.size,sy+Math.sin(a1)*e.size);X.lineTo(sx+Math.cos(a2)*e.size*0.5,sy+Math.sin(a2)*e.size*0.5)}
+      X.closePath();X.fill();
+      // 外发光环
+      X.globalAlpha=0.3+Math.sin(G.time*4)*0.15;
+      X.strokeStyle=e.color;X.lineWidth=3;
+      X.beginPath();X.arc(sx,sy,e.size+6,0,PI2);X.stroke();
+      X.globalAlpha=1;X.shadowBlur=0;
+      // 怒眼
+      if(!flash){X.fillStyle='#ff0';X.beginPath();X.arc(sx-8,sy-4,4,0,PI2);X.fill();X.beginPath();X.arc(sx+8,sy-4,4,0,PI2);X.fill();X.fillStyle='#000';X.beginPath();X.arc(sx-8,sy-3,2,0,PI2);X.fill();X.beginPath();X.arc(sx+8,sy-3,2,0,PI2);X.fill()}
+      break;
+    default:
+      X.beginPath();X.arc(sx,sy,e.size,0,PI2);X.fill();X.shadowBlur=0;
   }
   
+  X.shadowBlur=0;
   // 燃烧效果
   if(e.burning>0){X.globalAlpha=0.5;X.fillStyle='#f80';X.beginPath();X.arc(sx,sy-e.size-5,5,0,PI2);X.fill();X.globalAlpha=1}
   // 减速效果
   if(e.slowTimer>0){X.globalAlpha=0.4;X.fillStyle='#8cf';X.beginPath();X.arc(sx,sy,e.size+3,0,PI2);X.fill();X.globalAlpha=1}
   
-  // 血条
-  if(e.hp<e.maxHp){
+  // 血条（非BOSS）
+  if(e.type!=='boss'&&e.hp<e.maxHp){
     const bw=e.size*2;
     X.fillStyle='#300';X.fillRect(sx-bw/2,sy-e.size-8,bw,3);
-    X.fillStyle=e.type==='boss'?'#f00':'#f44';X.fillRect(sx-bw/2,sy-e.size-8,bw*(e.hp/e.maxHp),3);
+    X.fillStyle='#f44';X.fillRect(sx-bw/2,sy-e.size-8,bw*(e.hp/e.maxHp),3);
   }
 }
 
@@ -835,7 +939,7 @@ function drawMenu(){
   X.globalAlpha=1;
   
   X.fillStyle='#555';X.font='12px sans-serif';
-  X.fillText('v0.5 · 真男人不回头',W/2,H/2+100);
+  X.fillText('v0.6 · 真男人不回头',W/2,H/2+100);
   X.textAlign='left';
 }
 
