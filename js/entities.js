@@ -250,7 +250,7 @@ function spawnXPGem(x, y, value) {
    7. updateEnemies
    ============================================================ */
 function updateEnemies(dt) {
-  for
+  for (var i = 0; i < enemies.length; i++) {
     var e = enemies[i];
     if (e.dead) continue;
 
