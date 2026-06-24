@@ -130,9 +130,9 @@ const ITEM_TYPES={
   shield:{name:'无敌',icon:'🛡',color:'#0ff',duration:3,
     apply(p){p.invincible=3}},
 };
-function spawnItem(x,y){
+function spawnItem(x,y,forcedType){
   const types=Object.keys(ITEM_TYPES);
-  const type=types[rndI(0,types.length-1)];
+  const type=forcedType||types[rndI(0,types.length-1)];
   items.push({x,y,type,...ITEM_TYPES[type],life:12,size:12,a:Math.random()*PI2});
 }
 function applyItem(item){
@@ -462,11 +462,18 @@ function killEnemy(e){
     addShake(10);
     spawnP(e.x,e.y,'#f44',30,6,0.8,6);
     G.bossKills++;
-    G.spawnMul*=2;
+    // BOSS死后不翻倍，保持正常难度
     // 第二个BOSS死后开始生成陷阱
     if(G.bossKills>=2&&!G.trapsEnabled){
       G.trapsEnabled=true;
     }
+    // BOSS掉落：3个道具
+    spawnItem(e.x+rnd(-40,40),e.y+rnd(-40,40),'shield');
+    spawnItem(e.x+rnd(-40,40),e.y+rnd(-40,40),'speed');
+    spawnItem(e.x+rnd(-40,40),e.y+rnd(-40,40),'heal');
+    // 2次升级选择
+    G.pendingUpgrades=2;
+    showUpgrades();
   }
   // 酸液池
   if(e.acidOnDeath){
@@ -547,7 +554,7 @@ const G={
     this.swordFx=[];this.lightFx=[];this.fireFx=[];this.iceFx=[];
     this.time=0;this.kills=0;this.spawnTimer=0;this.wave=1;this.waveTimer=0;
     this.combos=0;this.comboTimer=0;
-    this.bossKills=0;this.spawnMul=1;this.trapsEnabled=false;this._trapTimer=0;
+    this.bossKills=0;this.spawnMul=1;this.trapsEnabled=false;this._trapTimer=0;this.pendingUpgrades=0;
     this.state='play';
   },
   gameOver(){
@@ -1431,7 +1438,10 @@ C.addEventListener('click',e=>{
     for(let i=0;i<G.upgradeOpts.length;i++){
       const y=startY+i*75;
       if(mx>W/2-bw/2&&mx<W/2+bw/2&&my>y&&my<y+bh){
-        G.upgradeOpts[i].apply();G.state='play';return;
+        G.upgradeOpts[i].apply();
+        G.pendingUpgrades=(G.pendingUpgrades||0)-1;
+        if(G.pendingUpgrades>0){showUpgrades()}else{G.state='play'}
+        return;
       }
     }
   }
@@ -1442,7 +1452,9 @@ addEventListener('keydown',e=>{
   if(G.state==='upgrade'){
     const n=parseInt(e.key);
     if(n>=1&&n<=3&&G.upgradeOpts[n-1]){
-      G.upgradeOpts[n-1].apply();G.state='play';
+      G.upgradeOpts[n-1].apply();
+      G.pendingUpgrades=(G.pendingUpgrades||0)-1;
+      if(G.pendingUpgrades>0){showUpgrades()}else{G.state='play'}
     }
   }
 });
