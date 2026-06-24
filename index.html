@@ -313,7 +313,22 @@ const WEAPONS={
       G.iceFx.push({x:p.x,y:p.y,range,life:0.4,max:0.4});
       addShake(2);
     }},
+  // 💣 边走边埋 — 踩到就炸，清场神器
+  mine:{name:'地雷',icon:'💣',desc:'边走边埋地雷，怪物踩到引爆',color:'#e44',
+    baseDmg:45,baseCd:1.8,baseRange:0,
+    _cd:0,
+    update(p,ens,lvl,dt){
+      this._cd=Math.max(0,(this._cd||0)-dt);
+      if(this._cd>0)return;
+      const interval=Math.max(0.6,1.8-lvl*0.12);
+      this._cd=interval;
+      const dmg=45+lvl*15, radius=28+lvl*4, splashR=radius*2.2;
+      mines.push({x:p.x+(Math.random()-0.5)*20, y:p.y+(Math.random()-0.5)*20,
+        radius, splashR, dmg, life:10, born:G.time, armed:false, armTime:0.5});
+    }},
 };
+
+const mines=[];
 
 // ==================== 组合技系统 ====================
 // 当任意技能Lv5+另一个技能Lv1+触发
@@ -517,7 +532,7 @@ const G={
     player.speed=160*ch.speedMul;player.magnet=90;player.armor=0;
     player.healOnKill=0;player.critChance=0;player.dmgMul=1;player.cdMul=1;player.revives=0;
     player.weapons=[{type:'sword',lv:1,cd:0}];player.invincible=0;
-    enemies.length=0;gems.length=0;particles.length=0;dmgTexts.length=0;bossBullets.length=0;traps.length=0;items.length=0;
+    enemies.length=0;gems.length=0;particles.length=0;dmgTexts.length=0;bossBullets.length=0;traps.length=0;items.length=0;mines.length=0;
     this.swordFx=[];this.lightFx=[];this.fireFx=[];this.iceFx=[];
     this.time=0;this.kills=0;this.spawnTimer=0;this.wave=1;this.waveTimer=0;
     this.combos=0;this.comboTimer=0;
@@ -574,6 +589,9 @@ function spawnWave(dt){
     }
   }
   G.spawnTimer-=dt;
+  // BOSS存活时不刷小怪
+  const bossAlive=enemies.some(e=>e.type==='boss'&&!e.dead);
+  if(bossAlive)return;
   if(G.spawnTimer>0)return;
   const w=G.wave;
   G.spawnTimer=Math.max(0.15,0.8-w*0.05);
@@ -719,6 +737,35 @@ function update(dt){
   
   // BOSS子弹更新
   for(let i=bossBullets.length-1;i>=0;i--){
+  
+  // 地雷更新
+  for(let i=mines.length-1;i>=0;i--){
+    const m=mines[i];
+    if(G.time-m.born>m.life){mines.splice(i,1);continue}
+    if(!m.armed&&G.time-m.born>m.armTime)m.armed=true;
+    if(!m.armed)continue;
+    for(const e of enemies){
+      if(e.dead)continue;
+      if(dist(m,e)<m.radius+e.size){
+        for(const e2 of enemies){
+          if(e2.dead)continue;
+          if(dist(m,e2)<m.splashR){
+            e2.hp-=m.dmg;e2.hitFlash=0.1;
+            spawnDmg(e2.x,e2.y-e2.size,m.dmg,'#e44');
+            if(e2.hp<=0)killEnemy(e2);
+          }
+        }
+        for(let k=0;k<12;k++){
+          const a=Math.random()*PI2;
+          spawnP(m.x,m.y,Math.random()>0.5?'#e44':'#f80',Math.cos(a)*rnd(60,150),Math.sin(a)*rnd(60,150),0.3,4);
+        }
+        addShake(4);
+        playSound('fire');
+        mines.splice(i,1);
+        break;
+      }
+    }
+  }
     const b=bossBullets[i];
     b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;
     if(b.life<=0||dist(p,b)>800){bossBullets.splice(i,1);continue}
@@ -1128,6 +1175,24 @@ function drawItems(){
   }
 }
 
+function drawMines(){
+  for(const m of mines){
+    const sx=m.x-cam.x,sy=m.y-cam.y;
+    if(sx<-50||sx>W+50||sy<-50||sy>H+50)continue;
+    const pulse=0.7+0.3*Math.sin(G.time*8);
+    const sz=m.armed?m.radius*0.5*Math.min(1,(G.time-m.born)/m.armTime):4;
+    if(m.armed){
+      X.strokeStyle='rgba(228,68,68,'+0.2*pulse+')';
+      X.lineWidth=1.5;
+      X.beginPath();X.arc(sx,sy,m.splashR,0,PI2);X.stroke();
+    }
+    X.fillStyle=m.armed?'rgba(228,68,68,'+pulse+')':'rgba(150,150,150,0.5)';
+    X.beginPath();X.arc(sx,sy,sz,0,PI2);X.fill();
+    X.fillStyle='#333';
+    X.beginPath();X.arc(sx,sy,sz*0.4,0,PI2);X.fill();
+  }
+}
+
 function drawParticles(){
   for(const p of particles){
     X.globalAlpha=p.life/p.maxLife;X.fillStyle=p.color;
@@ -1371,6 +1436,7 @@ function loop(now){
     drawDeathTraces();
     drawGems();
     drawItems();
+    drawMines();
     drawTraps();
     for(const e of enemies)drawEnemy(e);
     drawPlayer();
