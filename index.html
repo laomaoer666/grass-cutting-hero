@@ -164,7 +164,7 @@ const ENEMY_TYPES={
 };
 function spawnEnemy(type,x,y,hpMult=1){
   const t=ENEMY_TYPES[type];
-  const e={type,x,y,...t,hp:t.hp*hpMult,maxHp:t.hp*hpMult,dmg:t.dmg*(1+(hpMult-1)*0.3),
+  const e={type,x,y,...t,hp:t.hp*hpMult,maxHp:t.hp*hpMult,dmg:t.dmg*(1+(hpMult-1)*0.5),
     hitFlash:0,burning:0,burnDmg:0,slow:0,slowTimer:0,dead:false,
     acidOnDeath:t.acidOnDeath||false,children:t.children||0,
     bossAtkCd:type==='boss'?1.5:0,bossPhase:0,bossChargeCd:type==='boss'?8:0,bossCharging:false,bossChargeDir:0};
@@ -523,7 +523,7 @@ function spawnWave(dt){
   const w=G.wave;
   G.spawnTimer=Math.max(0.15,0.8-w*0.05);
   const cnt=Math.min(40,6+Math.floor(w*2))*(G.spawnMul||1);
-  const hpMult=1+w*0.25;
+  const hpMult=(1+w*0.25)*(1+G.kills*0.0008);
   const pool=getMonsterPool(w);
   
   for(let i=0;i<cnt;i++){
