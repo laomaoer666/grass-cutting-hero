@@ -516,6 +516,17 @@ function showUpgrades(){
   G.upgradeOpts=shuf;
 }
 
+// ==================== 记录系统 ====================
+function loadRecord(){
+  try{
+    const r=localStorage.getItem('grassHeroRecord');
+    return r?JSON.parse(r):{time:0,kills:0,level:0,char:0};
+  }catch(e){return{time:0,kills:0,level:0,char:0}}
+}
+function saveRecord(rec){
+  try{localStorage.setItem('grassHeroRecord',JSON.stringify(rec))}catch(e){}
+}
+
 // ==================== 游戏状态 ====================
 const G={
   state:'menu',time:0,kills:0,
@@ -549,6 +560,11 @@ const G={
       return;
     }
     this.state='gameover';
+    // 保存最高记录
+    const rec=loadRecord();
+    const isNewRec=this.time>rec.time;
+    if(isNewRec)saveRecord({time:this.time,kills:this.kills,level:player.level,char:selectedChar});
+    this.isNewRec=isNewRec;
   }
 };
 
@@ -1298,14 +1314,24 @@ function drawUpgradePanel(){
 
 function drawGameOver(){
   if(G.state!=='gameover')return;
+  const rec=loadRecord();
   X.fillStyle='rgba(0,0,0,0.75)';X.fillRect(0,0,W,H);
   X.textAlign='center';
   X.fillStyle='#f44';X.font='bold 52px sans-serif';
   X.fillText('💀 游戏结束',W/2,H/2-80);
+  // 本次成绩
   X.fillStyle='#ccc';X.font='18px sans-serif';
   X.fillText(`存活：${fmtTime(G.time)}   击杀：${G.kills}   等级：Lv.${player.level}`,W/2,H/2-20);
+  // 最高记录
+  X.fillStyle='#aaa';X.font='14px sans-serif';
+  X.fillText(`🏆 最高记录：${fmtTime(rec.time)}  击杀：${rec.kills}  等级：Lv.${rec.level}`,W/2,H/2+15);
+  // 新纪录提示
+  if(G.isNewRec){
+    X.fillStyle='#ff0';X.font='bold 20px sans-serif';
+    X.fillText('🎉 新纪录！',W/2,H/2+45);
+  }
   X.fillStyle='#0f8';X.font='bold 22px sans-serif';
-  X.fillText('点击重新开始',W/2,H/2+40);
+  X.fillText('点击重新开始',W/2,H/2+75);
   X.textAlign='left';
 }
 
@@ -1320,6 +1346,12 @@ function drawMenu(){
   X.fillStyle='#888';X.font='14px sans-serif';
   X.fillText('WASD/方向键移动 · 自动攻击 · 升级强化',W/2,H/2-10);
   
+  // 最高记录
+  const rec=loadRecord();
+  if(rec.time>0){
+    X.fillStyle='#aaa';X.font='14px sans-serif';
+    X.fillText(`🏆 最高记录：${fmtTime(rec.time)}  击杀：${rec.kills}`,W/2,H/2+15);
+  }
   // 闪烁提示
   X.globalAlpha=0.5+Math.sin(Date.now()/500)*0.5;
   X.fillStyle='#0f8';X.font='bold 24px sans-serif';
