@@ -209,10 +209,12 @@ const GAME = {
 // ============ 游戏主循环 ============
 let lastTime = 0;
 let catEffectTimer = 0;
+let lastDt = 0;
 
 function gameLoop(timestamp) {
     const dt = Math.min(0.05, (timestamp - lastTime) / 1000);
     lastTime = timestamp;
+    lastDt = dt;
 
     if (GAME.state === 'playing') {
         update(dt);
@@ -221,6 +223,16 @@ function gameLoop(timestamp) {
     // 渲染
     ctx.fillStyle = COLORS.bg;
     ctx.fillRect(0, 0, W, H);
+
+    // DEBUG: 最简单的测试 - 红色方块
+    if (GAME.state === 'playing') {
+        ctx.fillStyle = '#f00';
+        ctx.fillRect(10, H/2 - 30, 200, 20);
+        ctx.fillStyle = '#fff';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('E=' + (typeof enemies !== 'undefined' ? enemies.length : '?') + ' dt=' + (typeof lastDt !== 'undefined' ? lastDt.toFixed(4) : '?'), 15, H/2 - 15);
+    }
 
     if (GAME.state === 'menu') {
         drawMenu(timestamp);
