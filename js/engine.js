@@ -233,6 +233,28 @@ function gameLoop(timestamp) {
         drawGameOver();
     }
 
+    // DEBUG: 在最顶层直接画敌人位置
+    if (GAME.state === 'playing' && typeof enemies !== 'undefined' && enemies.length > 0) {
+        ctx.fillStyle = '#f00';
+        ctx.globalAlpha = 0.9;
+        ctx.font = 'bold 16px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('ENEMIES:' + enemies.length + ' cam:' + cam.x.toFixed(0) + ',' + cam.y.toFixed(0), 10, H / 2);
+        for (var _di = 0; _di < Math.min(enemies.length, 5); _di++) {
+            var _de = enemies[_di];
+            if (_de.dead) continue;
+            var _dsx = _de.x - cam.x + W / 2;
+            var _dsy = _de.y - cam.y + H / 2;
+            ctx.beginPath();
+            ctx.arc(_dsx, _dsy, 25, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.fillText('E' + _di + ':(' + _de.x.toFixed(0) + ',' + _de.y.toFixed(0) + ')→(' + _dsx.toFixed(0) + ',' + _dsy.toFixed(0) + ')', 10, H / 2 + 20 + _di * 18);
+            ctx.fillStyle = '#f00';
+        }
+        ctx.globalAlpha = 1;
+    }
+
     requestAnimationFrame(gameLoop);
 }
 
